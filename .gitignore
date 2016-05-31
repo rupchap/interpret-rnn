@@ -1,3 +1,6 @@
 
-#ODS temp files
+# ODS temp files
 .~lock*
+
+# ipython temp files
+.ipynb_checkpoints/
