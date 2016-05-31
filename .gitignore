@@ -4,3 +4,6 @@
 
 # ipython temp files
 .ipynb_checkpoints/
+
+# pycharm idea files
+.idea/
