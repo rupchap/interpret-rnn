@@ -7,3 +7,6 @@
 
 # pycharm idea files
 .idea/
+
+# tensorboard logs
+tflogs/
