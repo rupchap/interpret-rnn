@@ -80,6 +80,7 @@ def main():
                 avg_cost += batch_cost / num_batches
 
                 # display logs
+                # todo: make this do something!!
                 summary_str = sess.run(summary_op, feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=sess.run(global_step))
 
