@@ -6,7 +6,7 @@ from tensorflow.models.rnn import rnn
 
 
 # graph params
-datafolder = '/home/rupchap/data/NYT/'
+datafolder = '/Volumes/FOB/data/NYT/'
 logfolder = 'tflogs/'
 vocab_size = 10000
 rel_vocab_size = 25
@@ -36,6 +36,8 @@ def main():
         inputs = embed(x)
         logits = inference(inputs)
         cost = loss(logits, y)
+        # TODO: drop in summary record for cost here?
+
 
         global_step = tf.Variable(initial_value=0, name='global_step', trainable=False)
 
@@ -52,8 +54,8 @@ def main():
         init_op = tf.initialize_all_variables()
         sess.run(init_op)
 
-    print('RUN TRAINING')
-    with sess.as_default():
+        print('RUN TRAINING')
+    # with sess.as_default():
         for epoch in range(training_epochs):
             avg_cost = 0.
 
@@ -84,7 +86,7 @@ def main():
                 summary_str = sess.run(summary_op, feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=sess.run(global_step))
 
-                print 'global step:', global_step.eval()
+                # print 'global step:', global_step.eval()
 
     print 'Optimisation complete'
 
@@ -123,8 +125,10 @@ def inference(inputs, max_sentence_length=max_sentence_length,
     output = cell_output
     print 'inference - output:', output
 
+    # TODO: Use linear function from TF??
     softmax_w = tf.get_variable("softmax_w", [hidden_size, predict_classes])
     softmax_b = tf.get_variable("softmax_b", [predict_classes])
+    # TODO: Add in non-linearity??
     logits = tf.matmul(output, softmax_w) + softmax_b
     print 'inference - logits:', logits
 
@@ -138,6 +142,7 @@ def loss(logits, y):
     dot_product = y * tf.log(logits)
     xentropy = -tf.reduce_sum(dot_product, reduction_indices=1)
     loss = tf.reduce_mean(xentropy)
+    # TODO: could use tf.nn.softmax_cross_entropy_with_logits
     return loss
 
 
