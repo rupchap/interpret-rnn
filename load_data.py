@@ -44,61 +44,61 @@ def main():
 
 class DataSet(object):
 
-  def __init__(self, sentences, relations):
-    """Construct a DataSet.
-    """
+    def __init__(self, sentences, relations):
+        """Construct a DataSet.
+        """
 
-    # Check matching number of examples
-    assert sentences.shape[0] == relations.shape[0], (
-        'sentences.shape: %s relations.shape: %s' % (len(sentences), relations.shape))
-    self._num_examples = sentences.shape[0]
+        # Check matching number of examples
+        assert sentences.shape[0] == relations.shape[0], (
+            'sentences.shape: %s relations.shape: %s' % (len(sentences), relations.shape))
 
-    self._sentences = sentences
-    self._relations = relations
-    self._epochs_completed = 0
-    self._index_in_epoch = 0
+        self._num_examples = sentences.shape[0]
+        self._sentences = sentences
+        self._relations = relations
+        self._epochs_completed = 0
+        self._index_in_epoch = 0
 
-  @property
-  def sentences(self):
-    return self._sentences
+    @property
+    def sentences(self):
+        return self._sentences
 
-  @property
-  def relations(self):
-    return self._relations
+    @property
+    def relations(self):
+        return self._relations
 
-  @property
-  def num_examples(self):
-    return self._num_examples
+    @property
+    def num_examples(self):
+        return self._num_examples
 
-  @property
-  def epochs_completed(self):
-    return self._epochs_completed
+    @property
+    def epochs_completed(self):
+        return self._epochs_completed
 
-  def next_batch(self, batch_size):
-    """Return the next `batch_size` examples from this data set."""
+    def next_batch(self, batch_size):
+        """Return the next `batch_size` examples from this data set."""
 
-    start = self._index_in_epoch
-    self._index_in_epoch += batch_size
+        start = self._index_in_epoch
+        self._index_in_epoch += batch_size
 
-    if self._index_in_epoch > self._num_examples:
-        # Finished epoch
-        self._epochs_completed += 1
+        if self._index_in_epoch > self._num_examples:
+            # Finished epoch
+            self._epochs_completed += 1
 
-        # Shuffle the data
-        perm = np.arange(self._num_examples)
-        np.random.shuffle(perm)
-        self._sentences = self._sentences[perm]
-        self._relations = self._relations[perm]
+            # Shuffle the data
+            perm = np.arange(self._num_examples)
+            np.random.shuffle(perm)
+            self._sentences = self._sentences[perm]
+            self._relations = self._relations[perm]
 
-        # Start next epoch
-        start = 0
-        self._index_in_epoch = batch_size
-        assert batch_size <= self._num_examples
+            # Start next epoch
+            start = 0
+            self._index_in_epoch = batch_size
+            assert batch_size <= self._num_examples
 
-    end = self._index_in_epoch
+        end = self._index_in_epoch
 
-    # return batch
-    return self._sentences[start:end], self._relations[start:end]
+        # return batch
+        return self._sentences[start:end], self._relations[start:end]
 
 
 def read_data_sets(datafolder='/home/rupchap/data/NYT/',
@@ -126,7 +126,7 @@ def read_data_sets(datafolder='/home/rupchap/data/NYT/',
         relations = np.array([x for (x, v) in zip(relations, valid_examples) if v])
         sentences = np.array([x for (x, v) in zip(sentences, valid_examples) if v])
 
-        print('save for reuse later')
+        print('pickle for reuse later')
         data = {'labels': labels, 'relations': relations, 'sentences': sentences}
         with open(picklefilepath, 'w') as f:
             pickle.dump(data, f)
@@ -153,7 +153,6 @@ def process_data(datafolder='/home/rupchap/data/NYT/', vocab_size=10000, rel_voc
     print('imported %i examples' % len(sentences))
 
     print('PROCESS SENTENCES')
-
     print('parse sentences to mask entities')
     masked_sentences = [mask_entities_in_sentence(sentence, entA, entB)
                         for sentence, entA, entB in zip(sentences, entAs, entBs)]
@@ -208,10 +207,8 @@ def process_data(datafolder='/home/rupchap/data/NYT/', vocab_size=10000, rel_voc
     # make relations onehot
     onehot_relations = dense_to_one_hot(vectorized_relations, num_classes=rel_vocab_size)
 
-
     print('save labels')
-    labels_filename = 'labels.txt'
-    labels_filepath = datafolder + labels_filename
+    labels_filepath = datafolder + 'labels.txt'
     save_list_to_file(labels, labels_filepath)
 
     return labels, onehot_relations, vectorized_sentences
