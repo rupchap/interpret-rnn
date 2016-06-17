@@ -6,7 +6,7 @@ from tensorflow.models.rnn import rnn
 
 
 # graph params
-datafolder = '/Volumes/FOB/data/NYT/'
+datafolder = '/home/rupchap/data/NYT/'
 logfolder = 'tflogs/'
 
 vocab_size = 10000
@@ -19,8 +19,8 @@ validation_size = 5000
 test_size = 500
 
 learning_rate = 0.01
-training_epochs = 2
-batch_size = 50
+training_epochs = 20
+batch_size = 500
 display_step = 5
 # TODO: bucket instead of padding all to max sentence length.
 max_sentence_length = 104
@@ -75,10 +75,9 @@ def main():
                 sess.run(train_op, feed_dict=feed_dict)
 
                 # compute average loss
-                # TODO: understand the mechanics of this - getting nan at the moment.
                 batch_cost = sess.run(cost, feed_dict=feed_dict)
                 avg_cost += batch_cost / num_batches
-                print 'avg_cost: ', avg_cost
+
 
                 # display logs
                 # todo: make this do something!!
@@ -86,6 +85,8 @@ def main():
                 # summary_writer.add_summary(summary_str, global_step=sess.run(global_step))
 
                 # print 'global step:', global_step.eval()
+
+            print('epoch:%2i avg_cost:%8f ' % (epoch, avg_cost))
 
     print 'Optimisation complete'
 
@@ -134,7 +135,9 @@ def inference(inputs, max_sentence_length=max_sentence_length,
 def loss(logits, y):
     y = tf.to_float(y)
     # note: could use tf.nn.sparse_softmax_cross_entropy_with_logits if y provided as index instead of onehot
-    loss = tf.nn.softmax_cross_entropy_with_logits(logits, y)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
+    loss = tf.reduce_mean(cross_entropy, name='cross_entropy_mean')
+
     print 'loss - logits:', logits
     print 'loss - y:', y
     print 'loss - loss', loss
