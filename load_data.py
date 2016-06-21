@@ -32,6 +32,10 @@ EOS_ID = 3
 _ENTA = '_ENTA'
 _ENTB = '_ENTB'
 
+# We will pad all sentences with _PAD up to max_sentence_length
+# RNN in tensorflow currently requires constant sentence length
+max_sentence_length = 104
+
 
 def main():
     datasets = read_data_sets()
@@ -100,6 +104,11 @@ class DataSet(object):
         # return batch
         return self._sentences[start:end], self._relations[start:end]
 
+    def get_all(self):
+        """Return all examples from this data set."""
+
+        return self._sentences, self._relations
+
 
 def read_data_sets(datafolder='/home/rupchap/data/NYT/',
                    vocab_size=10000, rel_vocab_size=25,
@@ -125,6 +134,11 @@ def read_data_sets(datafolder='/home/rupchap/data/NYT/',
         labels = [x for (x, v) in zip(labels, valid_examples) if v]
         relations = np.array([x for (x, v) in zip(relations, valid_examples) if v])
         sentences = np.array([x for (x, v) in zip(sentences, valid_examples) if v])
+
+        # pad sentences to max_sentence_length and return as a list
+        for sentence in sentences:
+            sentence += [PAD_ID] * (max_sentence_length - len(sentence))
+        # sentences = sentences.tolist()
 
         print('pickle for reuse later')
         data = {'labels': labels, 'relations': relations, 'sentences': sentences}
