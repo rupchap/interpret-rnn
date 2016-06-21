@@ -135,6 +135,8 @@ def inference(inputs, max_sentence_length=max_sentence_length,
         # add multiple layers
         cell = rnn_cell.MultiRNNCell([lstm_cell] * num_layers)
 
+        # todo: add dropout wrapper
+
         # Set initial state
         # TODO: how can a make this flexible to batch_size e.g. to run on test data?
         initial_state = cell.zero_state(batch_size, tf.float32)
