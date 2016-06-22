@@ -10,7 +10,7 @@ import time
 # tensorboard --logdir=/tmp/tflogs
 
 # file locations
-datafolder = '/home/rupchap/data/NYT/'
+datafolder = '/data/NYT/'
 logfolder = '/tmp/tflogs/' + time.strftime("%Y%m%d-%H%M%S") + '/'
 save_path = '/tmp/tfmodel.ckpt'
 
@@ -28,7 +28,7 @@ test_size = 500
 learning_rate = 0.01
 training_steps = 100000
 batch_size = 50
-display_step = 100
+display_step = 1
 save_step = 1000
 
 max_sentence_length = 104
@@ -78,37 +78,32 @@ def main():
             feed_dict = {x: batch_x, y: batch_y}
             sess.run(train_op, feed_dict=feed_dict)
 
-            # Update the events file.
-            summary_str = sess.run(summary_op, feed_dict=feed_dict)
-            summary_writer.add_summary(summary_str)
-
             if step % display_step == 0:
                 # print current batch cost
                 batch_cost = sess.run(cost, feed_dict=feed_dict)
                 print('step:%2i batch cost:%8f ' % (step, batch_cost))
 
                 # print validation accuracy
-                # RNN in tensorflow currently requires same batch_size for test data
-                # So loop over batches to get full validation dataset
-                # TODO: modify code to pass batch_size as a param in feed_dict?
-                val_batch_count = 0
-                val_batch_accuracy_sum = 0
-                while datasets.validation.epochs_completed == validation_epoch_counter:
-                    validation_x, validation_y = datasets.validation.next_batch(batch_size)
-                    validation_x = validation_x.tolist()
 
-                    feed_dict = {x: validation_x,
-                                 y: validation_y}
-                    val_batch_accuracy_sum += sess.run(accuracy, feed_dict=feed_dict)
-                    val_batch_count += 1
-                validation_epoch_counter += 1
+                # TODO: consider splitting accuracy by relation type.
+                # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
-                print('step:%2i val accuracy:%8f ' % (step, val_batch_accuracy_sum/val_batch_count))
+                validation_x, validation_y = datasets.validation.get_all()
+                validation_x = validation_x.tolist()
+                feed_dict = {x: validation_x,
+                             y: validation_y}
+                val_batch_accuracy = sess.run(accuracy, feed_dict=feed_dict)
+                print('step:%2i val accuracy:%8f ' % (step, val_batch_accuracy))
 
             if step % save_step == 0:
                 # save variables
                 saver.save(sess, save_path=save_path)
                 print('Model saved in: %s' % save_path)
+
+            # Update the events file.
+            summary_str = sess.run(summary_op, feed_dict=feed_dict)
+            summary_writer.add_summary(summary_str)
+
 
     print 'Optimisation complete'
 
@@ -135,25 +130,14 @@ def inference(inputs, max_sentence_length=max_sentence_length,
         # add multiple layers
         cell = rnn_cell.MultiRNNCell([lstm_cell] * num_layers)
 
-        # todo: add dropout wrapper
+        # TODO: add dropout wrapper
 
-        # Set initial state
-        # TODO: how can a make this flexible to batch_size e.g. to run on test data?
-        initial_state = cell.zero_state(batch_size, tf.float32)
-
-        # TODO: should be possible to use the below rather than manually unrolling.
-        # inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, max_sentence_length, inputs)]
-        # outputs, state = rnn.rnn(lstm_cell, inputs, initial_state)
+        inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, max_sentence_length, inputs)]
+        print 'inference - inputs:', inputs
+        outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
         # pick up last output - the only one we need.
-        # output = tf.reshape(tf.concat(1, outputs), [-1, hidden_size])
+        output = outputs[-1]
 
-        state = initial_state
-        for time_step in range(max_sentence_length):
-            if time_step > 0:
-                tf.get_variable_scope().reuse_variables()
-            cell_output, state = cell(inputs[:, time_step, :], state)
-
-        output = cell_output
     print 'inference - output:', output
 
     with tf.name_scope('LinearTransform'):
