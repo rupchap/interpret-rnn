@@ -110,7 +110,7 @@ class DataSet(object):
         return self._sentences, self._relations
 
 
-def read_data_sets(datafolder='/home/rupchap/data/NYT/',
+def read_data_sets(datafolder='/data/NYT/',
                    vocab_size=10000, rel_vocab_size=25,
                    validation_size=5000, test_size=500):
     class DataSets(object):
@@ -160,7 +160,7 @@ def read_data_sets(datafolder='/home/rupchap/data/NYT/',
     return data_sets
 
 
-def process_data(datafolder='/home/rupchap/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 
     print('IMPORT DATA')
     labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)

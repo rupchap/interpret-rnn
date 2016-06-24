@@ -19,8 +19,8 @@ vocab_size = 10000
 rel_vocab_size = 25
 
 embed_size = 30
-hidden_size = 10
-num_layers = 2
+hidden_size = 50
+num_layers = 3
 
 validation_size = 5000
 test_size = 500
@@ -46,17 +46,20 @@ def main():
     x = tf.placeholder(dtype='int32', shape=[None, max_sentence_length], name='data')
     y = tf.placeholder(dtype='int32', shape=[None, rel_vocab_size], name='labels')
 
+    # todo: either make this a contant or add to all dicts.
+    dropout = tf.placeholder(tf.float32)
+
     inputs = embed(x)
-    logits = inference(inputs)
+    logits = inference(inputs, dropout)
     cost = loss(logits, y)
     train_op = training(cost)
 
     accuracy = evaluate(logits, y)
 
-    # write graph to tensorboard
+    # Op to generate summary stats
     summary_op = tf.merge_all_summaries()
 
-    # Create a saver for writing training checkpoints.
+    # Create a saver for writing checkpoints.
     saver = tf.train.Saver()
 
     print('RUN TRAINING')
@@ -66,9 +69,12 @@ def main():
         init_op = tf.initialize_all_variables()
         sess.run(init_op)
         # Instantiate a SummaryWriter to output summaries and the Graph.
-        summary_writer = tf.train.SummaryWriter(logfolder, graph_def=sess.graph_def)
+        train_writer = tf.train.SummaryWriter(logfolder+ '/train', graph_def=sess.graph_def)
+        validation_writer = tf.train.SummaryWriter(logfolder + '/validation')
 
-        validation_epoch_counter = 0
+
+        dropout = 0.8
+
         for step in range(training_steps):
 
             batch_x, batch_y = datasets.train.next_batch(batch_size)
@@ -90,19 +96,24 @@ def main():
 
                 validation_x, validation_y = datasets.validation.get_all()
                 validation_x = validation_x.tolist()
-                feed_dict = {x: validation_x,
-                             y: validation_y}
-                val_batch_accuracy = sess.run(accuracy, feed_dict=feed_dict)
+                validation_dict = {x: validation_x,
+                                   y: validation_y}
+                val_batch_accuracy = sess.run(accuracy, feed_dict=validation_dict)
                 print('step:%2i val accuracy:%8f ' % (step, val_batch_accuracy))
+
+                # Update the events file for validation
+                summary_str = sess.run(summary_op, feed_dict=validation_dict)
+                validation_writer.add_summary(summary_str, step)
+
 
             if step % save_step == 0:
                 # save variables
                 saver.save(sess, save_path=save_path)
                 print('Model saved in: %s' % save_path)
 
-            # Update the events file.
+            # Update the events file for training
             summary_str = sess.run(summary_op, feed_dict=feed_dict)
-            summary_writer.add_summary(summary_str)
+            train_writer.add_summary(summary_str, step)
 
 
     print 'Optimisation complete'
@@ -119,19 +130,21 @@ def embed(x):
     return inputs
 
 
-def inference(inputs, max_sentence_length=max_sentence_length,
+def inference(inputs, dropout, max_sentence_length=max_sentence_length,
               hidden_size=hidden_size, predict_classes=rel_vocab_size):
 
     with tf.variable_scope("RNN"):
 
         # create basic LSTM cell
-        lstm_cell = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+        cell = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+
+        # add dropout wrapper
+        cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=dropout)
 
         # add multiple layers
-        cell = rnn_cell.MultiRNNCell([lstm_cell] * num_layers)
+        cell = rnn_cell.MultiRNNCell([cell] * num_layers)
 
-        # TODO: add dropout wrapper
-
+        # TODO: consider using tf.unpack() here for readability?
         inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, max_sentence_length, inputs)]
         print 'inference - inputs:', inputs
         outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
