@@ -26,6 +26,7 @@ validation_size = 5000
 test_size = 500
 
 learning_rate = 0.01
+dropout_keep_prob = 0.8
 training_steps = 100000
 batch_size = 50
 display_step = 1
