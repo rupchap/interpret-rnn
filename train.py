@@ -5,6 +5,8 @@ from tensorflow.models.rnn import rnn_cell
 from tensorflow.models.rnn import rnn
 import time
 
+from model import RNNClassifierModel
+from model import SmallConfig
 
 # To run tensorboard:
 # tensorboard --logdir=/tmp/tflogs
@@ -29,7 +31,7 @@ learning_rate = 0.01
 dropout_keep_prob = 0.8
 training_steps = 100000
 batch_size = 50
-display_step = 1
+checkpoint_step = 100
 save_step = 1000
 
 max_sentence_length = 104
@@ -44,24 +46,21 @@ def main():
     print('%i steps of %i-batches = %f epochs' % (training_steps, batch_size, num_epochs))
 
     print('BUILD GRAPH')
-    x = tf.placeholder(dtype='int32', shape=[None, max_sentence_length], name='data')
-    y = tf.placeholder(dtype='int32', shape=[None, rel_vocab_size], name='labels')
+    # Build training model
+    train_config = SmallConfig()
+    with tf.variable_scope("model"):
+        m = RNNClassifierModel(is_training=True, config=train_config)
 
-    # todo: either make this a contant or add to all dicts.
-    dropout = tf.placeholder(tf.float32)
-
-    inputs = embed(x)
-    logits = inference(inputs, dropout)
-    cost = loss(logits, y)
-    train_op = training(cost)
-
-    accuracy = evaluate(logits, y)
+    # Build validation model, reusing training variables
+    val_config = train_config
+    with tf.variable_scope("model", reuse=True):
+        m_val = RNNClassifierModel(is_training=False, config=val_config)
 
     # Op to generate summary stats
-    summary_op = tf.merge_all_summaries()
+    merged = tf.merge_all_summaries()
 
     # Create a saver for writing checkpoints.
-    saver = tf.train.Saver()
+    # saver = tf.train.Saver()
 
     print('RUN TRAINING')
 
@@ -70,126 +69,65 @@ def main():
         init_op = tf.initialize_all_variables()
         sess.run(init_op)
         # Instantiate a SummaryWriter to output summaries and the Graph.
-        train_writer = tf.train.SummaryWriter(logfolder+ '/train', graph_def=sess.graph_def)
-        validation_writer = tf.train.SummaryWriter(logfolder + '/validation')
+        writer = tf.train.SummaryWriter(logfolder + '/train', graph_def=sess.graph_def)
 
 
-        dropout = 0.8
-
+        previous_val_costs = []
         for step in range(training_steps):
 
-            batch_x, batch_y = datasets.train.next_batch(batch_size)
-            batch_x = batch_x.tolist()
-
             # train on batch data
-            feed_dict = {x: batch_x, y: batch_y}
-            sess.run(train_op, feed_dict=feed_dict)
+            x_batch, y_batch = datasets.train.next_batch(batch_size)
+            x_batch = x_batch.tolist()
+            feed_dict = {m.input_data: x_batch,
+                         m.targets: y_batch}
 
-            if step % display_step == 0:
+            sess.run(m.train_op, feed_dict=feed_dict)
+
+            if step % checkpoint_step == 0:
                 # print current batch cost
-                batch_cost = sess.run(cost, feed_dict=feed_dict)
+                batch_cost = sess.run(m.cost, feed_dict=feed_dict)
                 print('step:%2i batch cost:%8f ' % (step, batch_cost))
 
-                # print validation accuracy
 
                 # TODO: consider splitting accuracy by relation type.
                 # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
-                validation_x, validation_y = datasets.validation.get_all()
-                validation_x = validation_x.tolist()
-                validation_dict = {x: validation_x,
-                                   y: validation_y}
-                val_batch_accuracy = sess.run(accuracy, feed_dict=validation_dict)
-                print('step:%2i val accuracy:%8f ' % (step, val_batch_accuracy))
+                # print validation accuracy
+                x_val, y_val = datasets.validation.get_all()
+                x_val = x_val.tolist()
+                feed_dict_val = {m_val.input_data: x_val,
+                                 m_val.targets: y_val}
+                accuracy_val = sess.run(m_val.accuracy, feed_dict=feed_dict_val)
+                cost_val = sess.run(m_val.cost, feed_dict=feed_dict_val)
+                print('step:%2i val accuracy:%8f ' % (step, accuracy_val))
+                print('step:%2i val cost:%8f ' % (step, cost_val))
+                # print 'targets:', y_val
+                # print 'proba:', sess.run(m_val.proba, feed_dict_val)
+                # print 'predict:', sess.run(m_val.predictions, feed_dict_val)
+
+                # decay learning rate if not improving
+                if len(previous_val_costs) > 2 and cost_val > max(previous_val_costs[-3:]):
+                    m.decay_lr(sess, 0.9)
+                    print 'decayed lr to:', sess.run(m.lr, feed_dict)
+                previous_val_costs.append(cost_val)
 
                 # Update the events file for validation
-                summary_str = sess.run(summary_op, feed_dict=validation_dict)
-                validation_writer.add_summary(summary_str, step)
+                # summary_str = sess.run(summary_op, feed_dict=feed_dict_val)
+                # writer_val.add_summary(summary_str, step)
+                # summary_str = sess.run(summary_op, feed_dict=feed_dict)
+                # writer.add_summary(summary_str, step)
 
 
-            if step % save_step == 0:
-                # save variables
-                saver.save(sess, save_path=save_path)
-                print('Model saved in: %s' % save_path)
-
-            # Update the events file for training
-            summary_str = sess.run(summary_op, feed_dict=feed_dict)
-            train_writer.add_summary(summary_str, step)
-
+            # if step % save_step == 0:
+            #     # save variables
+            #     saver.save(sess, save_path=save_path)
+            #     print('Model saved in: %s' % save_path)
+            #
+            # # Update the events file for training
+            # summary_str = sess.run(summary_op, feed_dict=feed_dict)
+            # train_writer.add_summary(summary_str, step)
 
     print 'Optimisation complete'
-
-
-def embed(x):
-    print 'embed - x:', x
-    # Embedding
-    with tf.name_scope('Embedding'):
-        with tf.device("/cpu:0"):
-            embedding = tf.get_variable("embedding", [vocab_size, embed_size])
-            inputs = tf.nn.embedding_lookup(embedding, x)
-    print 'embed - inputs:', inputs
-    return inputs
-
-
-def inference(inputs, dropout, max_sentence_length=max_sentence_length,
-              hidden_size=hidden_size, predict_classes=rel_vocab_size):
-
-    with tf.variable_scope("RNN"):
-
-        # create basic LSTM cell
-        cell = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
-
-        # add dropout wrapper
-        cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=dropout)
-
-        # add multiple layers
-        cell = rnn_cell.MultiRNNCell([cell] * num_layers)
-
-        # TODO: consider using tf.unpack() here for readability?
-        inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, max_sentence_length, inputs)]
-        print 'inference - inputs:', inputs
-        outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
-        # pick up last output - the only one we need.
-        output = outputs[-1]
-
-    print 'inference - output:', output
-
-    with tf.name_scope('LinearTransform'):
-        W = tf.get_variable("W", [hidden_size, predict_classes])
-        b = tf.get_variable("b", [predict_classes])
-        logits = tf.matmul(output, W) + b
-    print 'inference - logits:', logits
-
-    return logits
-
-
-def loss(logits, y):
-    # note: could use tf.nn.sparse_softmax_cross_entropy_with_logits if y provided as index instead of onehot
-    with tf.name_scope('CrossEntropy'):
-        y = tf.to_float(y)
-        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
-        loss = tf.reduce_mean(cross_entropy, name='cross_entropy_mean')
-
-    print 'loss - logits:', logits
-    print 'loss - y:', y
-    print 'loss - loss', loss
-    return loss
-
-
-def training(cost):
-    tf.scalar_summary('cost', cost)
-    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-    train_op = optimizer.minimize(cost)
-    return train_op
-
-
-def evaluate(output, y):
-    with tf.name_scope('Evaluate'):
-        correct_prediction = tf.equal(tf.arg_max(output, dimension=1),
-                                      tf.arg_max(y, dimension=1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    tf.scalar_summary('accuracy', accuracy)
-    return accuracy
 
 
 if __name__ == "__main__":
