@@ -11,61 +11,52 @@ from tensorflow.models.rnn import rnn
 
 class RNNClassifierModel(object):
 
-    def __init__(self, is_training, config):
+    def __init__(self, config):
 
-        # placeholders
+        # data placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
         # self._y = tf.placeholder(dtype=tf.int32, shape=[None, config.rel_vocab_size], name='labels')
         self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
-        
+
+        # dropout placeholder
+        self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
         # embedding
-        with tf.name_scope('Embedding'):
-            with tf.device("/cpu:0"):
-                embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
-                inputs = tf.nn.embedding_lookup(embedding, self._x)
-
-        # embedding dropout
-        if is_training and config.keep_prob < 1:
-            with tf.name_scope('EmbeddingDropout'):
-                inputs = tf.nn.dropout(inputs, config.keep_prob)
+        with tf.device("/cpu:0"), tf.name_scope('Embedding'):
+            embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
+            inputs = tf.nn.embedding_lookup(embedding, self._x)
 
         # RNN
         with tf.variable_scope("RNN"):
-
             # LSTM cell
             cell = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
-
-            # LSTM dropout
-            if is_training and config.keep_prob < 1:
-                cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=config.keep_prob)
-
+            # Dropout
+            cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=self._dropout_keep_prob)
             # Multilayer
             cell = rnn_cell.MultiRNNCell([cell] * config.num_layers)
-
             # RNN
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
             outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
             output = outputs[-1]
             self._final_state = state
 
-
         # Linear transform
-        with tf.name_scope('LinearTransform'):
+        with tf.name_scope('Logits'):
             W = tf.get_variable("W", [config.hidden_size, config.rel_vocab_size])
             b = tf.get_variable("b", [config.rel_vocab_size])
             logits = tf.matmul(output, W) + b
 
         # Cost
-        with tf.name_scope('CrossEntropy'):
+        with tf.name_scope('Cost'):
             # y = tf.to_float(self._y)
             # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
             y = tf.to_int64(self._y)
             cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
             cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
-            tf.scalar_summary('cost', cost)
+
             self._cost = cost
 
+            tf.scalar_summary('cost', cost)
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
@@ -74,29 +65,21 @@ class RNNClassifierModel(object):
             # correct_prediction = tf.equal(y_pred, tf.arg_max(y, dimension=1))
             correct_prediction = tf.equal(y_pred, y)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+            self._proba = y_proba
+            self._ypred = y_pred
+            self._accuracy = accuracy
+
             tf.scalar_summary('accuracy', accuracy)
 
-        self._proba = y_proba
-        self._ypred = y_pred
-        self._accuracy = accuracy
+        # Initial learning rate
+        self._lr = tf.Variable(config.learning_rate, trainable=False)
 
-        # add optimizer and learning rate for training model only.
-        if is_training:
-
-            # Initial learning rate
-            self._lr = tf.Variable(config.learning_rate, trainable=False)
-
-            # Optimizer with clipped gradients
-            tvars = tf.trainable_variables()
-            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
-            optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
-            self._train_op = optimizer.apply_gradients(zip(grads, tvars))
-
-        # Merge summary ops
-        # merge_op = tf.merge_all_summaries()
-        # self._merge_op = merge_op
-
-        return
+        # Optimizer with clipped gradients
+        tvars = tf.trainable_variables()
+        grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self.lr, lr_value))
@@ -136,6 +119,10 @@ class RNNClassifierModel(object):
     @property
     def lr(self):
         return self._lr
+
+    @property
+    def dropout_keep_prob(self):
+        return self._dropout_keep_prob
 
     @property
     def train_op(self):
