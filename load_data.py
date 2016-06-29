@@ -7,6 +7,7 @@ import re
 import os
 import ast
 import numpy as np
+import pandas as pd
 import cPickle as pickle
 from collections import Counter
 
@@ -39,7 +40,15 @@ max_sentence_length = 104
 
 def main():
     datasets = read_data_sets()
-    sen, rel = datasets.train.next_batch(10)
+    sen, rel = datasets.train.next_batch(5)
+    print('training sample:')
+    for s in sen:
+        print(s)
+    for r in rel:
+        print(r)
+
+    sen, rel = datasets.test.next_batch(5)
+    print('training sample:')
     for s in sen:
         print(s)
     for r in rel:
@@ -162,9 +171,32 @@ def read_data_sets(datafolder='/data/NYT/',
 
 def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 
+    # TODO: loop to import both train and test data
     print('IMPORT DATA')
     labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)
-    print('imported %i examples' % len(sentences))
+    print('imported %i examples from %s' % (len(sentences), sourcefilename))
+
+    pos_count = labels.count('POSITIVE')
+    neg_count = labels.count('NEGATIVE')
+    unl_count = labels.count('UNLABELED')
+    print('data includes %i POSITIVE, %i NEGATIVE, %i UNLABELED.'
+          % (pos_count, neg_count, unl_count))
+
+    # Filter dataset to equal numbers of positive and negative cases. drop UNLABELED
+    data = pd.DataFrame({'labels': labels, 'relations': relations,
+                         'sentences': sentences, 'entAs': entAs, 'entBs': entBs})
+    pos = data[data['labels'] == 'POSITIVE']
+    neg = data[data['labels'] == 'NEGATIVE'].sample(n=pos_count)
+    data_filtered = pd.concat([pos, neg])
+    data_filtered = data_filtered.sample(frac=1)
+
+    print('filtered dataset created')
+
+    labels = data_filtered['labels']
+    relations = data_filtered['relations']
+    sentences = data_filtered['sentences']
+    entAs = data_filtered['entAs']
+    entBs = data_filtered['entBs']
 
     print('PROCESS SENTENCES')
     print('parse sentences to mask entities')
@@ -225,7 +257,8 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     labels_filepath = datafolder + 'labels.txt'
     save_list_to_file(labels, labels_filepath)
 
-    return labels, onehot_relations, vectorized_sentences
+    return labels, vectorized_relations, vectorized_sentences
+    # return labels, onehot_relations, vectorized_sentences
 
 
 def read_data(filename):

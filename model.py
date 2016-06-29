@@ -9,32 +9,15 @@ from tensorflow.models.rnn import rnn_cell
 from tensorflow.models.rnn import rnn
 
 
-class SmallConfig(object):
-    """Small config."""
-    init_scale = 0.1
-    learning_rate = 1.0
-    max_grad_norm = 5
-    num_layers = 2
-    max_epoch = 4
-    max_max_epoch = 13
-    keep_prob = 1.0
-    lr_decay = 0.5
-    batch_size = 20
-
-    vocab_size = 10000
-    hidden_size = 200
-    max_sentence_length = 104
-    rel_vocab_size = 25
-    embed_size = 30
-
-
 class RNNClassifierModel(object):
 
     def __init__(self, is_training, config):
 
         # placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
-        self._y = tf.placeholder(dtype=tf.int32, shape=[None, config.rel_vocab_size], name='labels')
+        # self._y = tf.placeholder(dtype=tf.int32, shape=[None, config.rel_vocab_size], name='labels')
+        self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
+        
 
         # embedding
         with tf.name_scope('Embedding'):
@@ -64,7 +47,7 @@ class RNNClassifierModel(object):
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
             outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
             output = outputs[-1]
-        self._final_state = state
+            self._final_state = state
 
 
         # Linear transform
@@ -75,30 +58,30 @@ class RNNClassifierModel(object):
 
         # Cost
         with tf.name_scope('CrossEntropy'):
-            y = tf.to_float(self._y)
-            cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
+            # y = tf.to_float(self._y)
+            # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
+            y = tf.to_int64(self._y)
+            cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
             cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
-        self._cost = cost
+            tf.scalar_summary('cost', cost)
+            self._cost = cost
+
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
             y_proba = tf.nn.softmax(logits)
             y_pred = tf.arg_max(logits, dimension=1)
-            correct_prediction = tf.equal(y_pred, tf.arg_max(y, dimension=1))
+            # correct_prediction = tf.equal(y_pred, tf.arg_max(y, dimension=1))
+            correct_prediction = tf.equal(y_pred, y)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            tf.scalar_summary('accuracy', accuracy)
+
         self._proba = y_proba
         self._ypred = y_pred
         self._accuracy = accuracy
 
-        # add scalar summaries
-        # tf.scalar_summary('cost', cost)
-        # tf.scalar_summary('accuracy', accuracy)
-
-
         # add optimizer and learning rate for training model only.
-        if not is_training:
-            return
-        else:
+        if is_training:
 
             # Initial learning rate
             self._lr = tf.Variable(config.learning_rate, trainable=False)
@@ -106,8 +89,14 @@ class RNNClassifierModel(object):
             # Optimizer with clipped gradients
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
-            optimizer = tf.train.GradientDescentOptimizer(self.lr)
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
             self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+
+        # Merge summary ops
+        # merge_op = tf.merge_all_summaries()
+        # self._merge_op = merge_op
+
+        return
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self.lr, lr_value))
@@ -151,3 +140,7 @@ class RNNClassifierModel(object):
     @property
     def train_op(self):
         return self._train_op
+
+    @property
+    def merge_op(self):
+        return self._merge_op
