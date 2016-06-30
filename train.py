@@ -12,7 +12,7 @@ from model import RNNClassifierModel
 
 # file locations
 datafolder = '/data/NYT/'
-logfolder = '/tmp/tflogs/' + '123/'
+logfolder = '/tmp/tflogs/' + time.strftime("%Y%m%d-%H%M%S") + '/'
 save_path = '/tmp/tfmodel.ckpt'
 
 
@@ -37,8 +37,8 @@ class SmallConfig(object):
 
     training_steps = 300000
     batch_size = 100
-    checkpoint_step = 10
-    save_step = 1000
+    report_step = 1000
+    save_step = 10000
 
 
 def main():
@@ -57,7 +57,6 @@ def main():
 
     # Op to generate summary stats
     merged = tf.merge_all_summaries()
-    print merged
 
     # Create a saver for writing checkpoints.
     saver = tf.train.Saver()
@@ -81,7 +80,6 @@ def main():
 
             # get batch data
             x_batch, y_batch = datasets.train.next_batch(config.batch_size)
-            x_batch = x_batch.tolist()
             feed_dict = {m.input_data: x_batch,
                          m.targets: y_batch,
                          m.dropout_keep_prob: config.dropout_keep_prob}
@@ -89,7 +87,7 @@ def main():
             # run a training step
             sess.run(m.train_op, feed_dict=feed_dict)
 
-            if step % config.checkpoint_step == 0:
+            if step % config.report_step == 0:
                 # get statistics on current batch
                 summaries, cost_batch = sess.run([merged, m.cost], feed_dict=feed_dict)
                 print('step:%2i batch cost:%8f ' % (step, cost_batch))
@@ -98,12 +96,11 @@ def main():
                 # TODO: consider splitting accuracy by relation type.
                 # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
-                # get statistics on validation data
+                # get statistics on validation data - no dropout
                 x_val, y_val = datasets.validation.get_all()
-                x_val = x_val.tolist()
                 feed_dict = {m.input_data: x_val,
                              m.targets: y_val,
-                             m.dropout_keep_prob: 0.9}
+                             m.dropout_keep_prob: 1.}
 
                 summaries_val, accuracy_val, cost_val = sess.run([merged, m.accuracy, m.cost],
                                                                  feed_dict=feed_dict)
@@ -111,12 +108,17 @@ def main():
                 print('step:%2i val cost:%8f ' % (step, cost_val))
                 writer_val.add_summary(summaries_val, step)
 
+                accuracy_byclass = sess.run(m.accuracy_byclass, feed_dict=feed_dict)
+                print('class accuracy:')
+                print accuracy_byclass
+
                 # decay learning rate if not improving
                 if len(previous_val_costs) > 2 and cost_val > max(previous_val_costs[-3:]):
                     m.decay_lr(sess, 0.9)
                     print('decayed lr to:', sess.run(m.lr, feed_dict))
                 previous_val_costs.append(cost_val)
 
+            if step % config.save_step == 0:
                 saver.save(sess, save_path=save_path)
                 print('Model saved in: %s' % save_path)
 

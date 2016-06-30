@@ -15,8 +15,8 @@ class RNNClassifierModel(object):
 
         # data placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
-        # self._y = tf.placeholder(dtype=tf.int32, shape=[None, config.rel_vocab_size], name='labels')
-        self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
+        self._y = tf.placeholder(dtype=tf.float32, shape=[None, config.rel_vocab_size], name='labels')
+        # self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
 
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
@@ -48,10 +48,7 @@ class RNNClassifierModel(object):
 
         # Cost
         with tf.name_scope('Cost'):
-            # y = tf.to_float(self._y)
-            # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
-            y = tf.to_int64(self._y)
-            cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, y, name='cross_entropy')
+            cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
             cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
 
             self._cost = cost
@@ -62,13 +59,19 @@ class RNNClassifierModel(object):
         with tf.name_scope('Accuracy'):
             y_proba = tf.nn.softmax(logits)
             y_pred = tf.arg_max(logits, dimension=1)
-            # correct_prediction = tf.equal(y_pred, tf.arg_max(y, dimension=1))
-            correct_prediction = tf.equal(y_pred, y)
+            y_actual = tf.arg_max(self._y, dimension=1)
+            correct_prediction = tf.equal(y_pred, y_actual)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
             self._proba = y_proba
             self._ypred = y_pred
             self._accuracy = accuracy
+
+            # accuracy per class
+            y_pred_onehot = tf.one_hot(y_pred, depth=config.rel_vocab_size, dtype=tf.float32)
+            y_correct_onehot = tf.mul(self._y, y_pred_onehot)
+            accuracy_byclass = tf.reduce_mean(y_correct_onehot, 0)
+            self._accuracy_byclass = accuracy_byclass
 
             tf.scalar_summary('accuracy', accuracy)
 
@@ -110,7 +113,11 @@ class RNNClassifierModel(object):
 
     @property
     def accuracy(self):
-        return self._accuracy
+        return self._accuracy\
+
+    @property
+    def accuracy_byclass(self):
+        return self._accuracy_byclass
 
     @property
     def final_state(self):
@@ -128,6 +135,3 @@ class RNNClassifierModel(object):
     def train_op(self):
         return self._train_op
 
-    @property
-    def merge_op(self):
-        return self._merge_op

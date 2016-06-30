@@ -132,25 +132,15 @@ def read_data_sets(datafolder='/data/NYT/',
         print('load pre-processed data')
         with open(picklefilepath, 'r') as f:
             data = pickle.load(f)
-        relations = np.array(data['relations'])
-        sentences = np.array(data['sentences'])
+        relations = data['relations']
+        sentences = data['sentences']
+
     else:
         print('no pre-processed datafiles found: rebuild them')
-        labels, relations, sentences = process_data(datafolder, vocab_size, rel_vocab_size)
-
-        # filter out 'UNLABELED' cases
-        valid_examples = [label != 'UNLABELED' for label in labels]
-        labels = [x for (x, v) in zip(labels, valid_examples) if v]
-        relations = np.array([x for (x, v) in zip(relations, valid_examples) if v])
-        sentences = np.array([x for (x, v) in zip(sentences, valid_examples) if v])
-
-        # pad sentences to max_sentence_length and return as a list
-        for sentence in sentences:
-            sentence += [PAD_ID] * (max_sentence_length - len(sentence))
-        # sentences = sentences.tolist()
+        relations, sentences = process_data(datafolder, vocab_size, rel_vocab_size)
 
         print('pickle for reuse later')
-        data = {'labels': labels, 'relations': relations, 'sentences': sentences}
+        data = {'relations': relations, 'sentences': sentences}
         with open(picklefilepath, 'w') as f:
             pickle.dump(data, f)
 
@@ -169,12 +159,10 @@ def read_data_sets(datafolder='/data/NYT/',
     return data_sets
 
 
-def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+def filter_data(data):
 
-    # TODO: loop to import both train and test data
-    print('IMPORT DATA')
-    labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)
-    print('imported %i examples from %s' % (len(sentences), sourcefilename))
+    # unpack data tuple
+    labels, relations, sentences, entAs, entBs = data
 
     pos_count = labels.count('POSITIVE')
     neg_count = labels.count('NEGATIVE')
@@ -188,6 +176,7 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     pos = data[data['labels'] == 'POSITIVE']
     neg = data[data['labels'] == 'NEGATIVE'].sample(n=pos_count)
     data_filtered = pd.concat([pos, neg])
+    # shuffle rows
     data_filtered = data_filtered.sample(frac=1)
 
     print('filtered dataset created')
@@ -197,6 +186,20 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     sentences = data_filtered['sentences']
     entAs = data_filtered['entAs']
     entBs = data_filtered['entBs']
+
+    return labels, relations, sentences, entAs, entBs
+
+
+def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+
+    print('IMPORT DATA')
+    # labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)
+    data = read_data(datafolder+sourcefilename)
+
+    print('imported %i examples from %s' % (len(data[0]), sourcefilename))
+
+    print('FILTER DATA')
+    labels, relations, sentences, entAs, entBs = filter_data(data)
 
     print('PROCESS SENTENCES')
     print('parse sentences to mask entities')
@@ -215,20 +218,16 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
         save_vocab_list_to_file(vocab_list, vocabfilepath)
     vocab, reverse_vocab = build_vocab_and_reverse_vocab(vocab_list)
 
-    print('get vectorized masked sentences')
-    vectorized_sentences_filename = 'sentences_%i.txt' % vocab_size
-    vectorized_sentences_filepath = datafolder + vectorized_sentences_filename
-    if os.path.isfile(vectorized_sentences_filepath):
-        print('import vectorized masked sentences from file')
-        vectorized_sentences_strings = get_list_from_file(vectorized_sentences_filepath)
-        vectorized_sentences = [ast.literal_eval(line) for line in vectorized_sentences_strings]
-    else:
-        print('build new vectorized masked sentences')
-        vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
-        save_list_to_file(vectorized_sentences, vectorized_sentences_filepath)
+    print('vectorize masked sentences')
+    vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
+
+    print('pad sentences to common length')
+    for sentence in vectorized_sentences:
+        sentence += [PAD_ID] * (max_sentence_length - len(sentence))
+
+    vectorized_sentences = np.array(vectorized_sentences)
 
     print('PROCESS RELATIONS')
-
     print('make vocab for relations')
     rel_vocabfilename = 'relations_vocab_%i.txt' % rel_vocab_size
     rel_vocabfilepath = datafolder + rel_vocabfilename
@@ -240,25 +239,17 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
         rel_counter = Counter(relations)
         rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
         rel_vocab_list = rel_vocab_list[:rel_vocab_size]
-        # Save to file
         save_vocab_list_to_file(rel_vocab_list, rel_vocabfilepath)
     rel_vocab, rel_reverse_vocab = build_vocab_and_reverse_vocab(rel_vocab_list)
 
     print('vectorize relations')
     vectorized_relations = [rel_vocab.get(relation, UNK_ID) for relation in relations]
-    vectorized_relations_filename = 'relations_%i.txt' % rel_vocab_size
-    vectorized_relations_filepath = datafolder + vectorized_relations_filename
-    save_list_to_file(vectorized_relations, vectorized_relations_filepath)
+    vectorized_relations = np.array(vectorized_relations)
 
     # make relations onehot
     onehot_relations = dense_to_one_hot(vectorized_relations, num_classes=rel_vocab_size)
 
-    print('save labels')
-    labels_filepath = datafolder + 'labels.txt'
-    save_list_to_file(labels, labels_filepath)
-
-    return labels, vectorized_relations, vectorized_sentences
-    # return labels, onehot_relations, vectorized_sentences
+    return onehot_relations, vectorized_sentences
 
 
 def read_data(filename):
@@ -375,8 +366,8 @@ def dense_to_one_hot(dense, num_classes=10):
     """Convert class labels from scalars to one-hot vectors."""
     num_examples = len(dense)
     index_offset = np.arange(num_examples) * num_classes
-    one_hot = np.zeros((num_examples, num_classes))
-    one_hot.flat[index_offset + dense] = 1
+    one_hot = np.zeros((num_examples, num_classes), dtype=np.float32)
+    one_hot.flat[index_offset + dense] = 1.
     return one_hot
 
 
