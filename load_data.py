@@ -121,7 +121,8 @@ class DataSet(object):
 
 def read_data_sets(datafolder='/data/NYT/',
                    vocab_size=10000, rel_vocab_size=25,
-                   validation_size=5000, test_size=500):
+                   validation_size=5000, test_size=500,
+                   train_size=0):
     class DataSets(object):
         pass
     data_sets = DataSets()
@@ -145,12 +146,17 @@ def read_data_sets(datafolder='/data/NYT/',
             pickle.dump(data, f)
 
     # slice for training, validation, test datasets
-    sentences_val = sentences[:validation_size]
-    relations_val = relations[:validation_size]
-    sentences_test = sentences[validation_size:validation_size+test_size]
-    relations_test = relations[validation_size:validation_size+test_size]
-    sentences_train = sentences[validation_size+test_size:]
-    relations_train = relations[validation_size+test_size:]
+    num_examples = sentences.shape[0]
+    if not train_size:
+        train_size = num_examples - validation_size - test_size
+
+    sentences_val, sentences = np.split(sentences, [validation_size])
+    sentences_test, sentences = np.split(sentences, [test_size])
+    sentences_train, sentences = np.split(sentences, [train_size])
+
+    relations_val, relations = np.split(relations, [validation_size])
+    relations_test, relations = np.split(relations, [test_size])
+    relations_train, relations = np.split(relations, [train_size])
 
     data_sets.train = DataSet(sentences_train, relations_train)
     data_sets.validation = DataSet(sentences_val, relations_val)

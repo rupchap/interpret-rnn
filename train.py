@@ -1,8 +1,8 @@
 import tensorflow as tf
 import numpy as np
 from load_data import read_data_sets
-from tensorflow.models.rnn import rnn_cell
-from tensorflow.models.rnn import rnn
+from tensorflow.python.ops import rnn_cell
+from tensorflow.python.ops import rnn
 import time
 
 from model import RNNClassifierModel
@@ -32,12 +32,13 @@ class SmallConfig(object):
 
     dropout_keep_prob = 0.9
 
-    validation_size = 5000
-    test_size = 500
+    train_size = 10  # 0 to use all remaining data for training.
+    validation_size = 10
+    test_size = 10
 
     training_steps = 300000
-    batch_size = 100
-    report_step = 1000
+    batch_size = 10
+    report_step = 10
     save_step = 10000
 
 
@@ -111,6 +112,12 @@ def main():
                 accuracy_byclass = sess.run(m.accuracy_byclass, feed_dict=feed_dict)
                 print('class accuracy:')
                 print accuracy_byclass
+                pred_byclass = sess.run(m.pred_byclass, feed_dict=feed_dict)
+                print('class prediction count:')
+                print pred_byclass
+                actual_byclass = sess.run(m.actual_byclass, feed_dict=feed_dict)
+                print('class actual count:')
+                print actual_byclass
 
                 # decay learning rate if not improving
                 if len(previous_val_costs) > 2 and cost_val > max(previous_val_costs[-3:]):

@@ -5,8 +5,8 @@ from __future__ import print_function
 import time
 import numpy as np
 import tensorflow as tf
-from tensorflow.models.rnn import rnn_cell
-from tensorflow.models.rnn import rnn
+from tensorflow.python.ops import rnn_cell
+from tensorflow.python.ops import rnn
 
 
 class RNNClassifierModel(object):
@@ -71,7 +71,11 @@ class RNNClassifierModel(object):
             y_pred_onehot = tf.one_hot(y_pred, depth=config.rel_vocab_size, dtype=tf.float32)
             y_correct_onehot = tf.mul(self._y, y_pred_onehot)
             accuracy_byclass = tf.reduce_mean(y_correct_onehot, 0)
+            pred_byclass = tf.reduce_sum(y_pred_onehot, 0)
+            actual_byclass = tf.reduce_sum(self._y, 0)
             self._accuracy_byclass = accuracy_byclass
+            self._pred_byclass = pred_byclass
+            self._actual_byclass = actual_byclass
 
             tf.scalar_summary('accuracy', accuracy)
 
@@ -118,6 +122,14 @@ class RNNClassifierModel(object):
     @property
     def accuracy_byclass(self):
         return self._accuracy_byclass
+
+    @property
+    def pred_byclass(self):
+        return self._pred_byclass
+
+    @property
+    def actual_byclass(self):
+        return self._actual_byclass
 
     @property
     def final_state(self):
