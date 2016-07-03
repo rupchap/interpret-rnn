@@ -8,6 +8,7 @@ import os
 import ast
 import numpy as np
 import pandas as pd
+import csv
 import cPickle as pickle
 from collections import Counter
 
@@ -57,17 +58,18 @@ def main():
 
 class DataSet(object):
 
-    def __init__(self, sentences, relations):
+    def __init__(self, sentences, relations, lengths):
         """Construct a DataSet.
         """
 
         # Check matching number of examples
         assert sentences.shape[0] == relations.shape[0], (
-            'sentences.shape: %s relations.shape: %s' % (len(sentences), relations.shape))
+            'sentences.shape: %s relations.shape: %s' % (sentences.shape[0], relations.shape))
 
         self._num_examples = sentences.shape[0]
         self._sentences = sentences
         self._relations = relations
+        self._lengths = lengths
         self._epochs_completed = 0
         self._index_in_epoch = 0
 
@@ -78,6 +80,10 @@ class DataSet(object):
     @property
     def relations(self):
         return self._relations
+
+    @property
+    def lengths(self):
+        return self._lengths
 
     @property
     def num_examples(self):
@@ -102,6 +108,7 @@ class DataSet(object):
             np.random.shuffle(perm)
             self._sentences = self._sentences[perm]
             self._relations = self._relations[perm]
+            self._lengths = self._lengths[perm]
 
             # Start next epoch
             start = 0
@@ -111,12 +118,12 @@ class DataSet(object):
         end = self._index_in_epoch
 
         # return batch
-        return self._sentences[start:end], self._relations[start:end]
+        return self._sentences[start:end], self._relations[start:end], self._lengths[start:end]
 
     def get_all(self):
         """Return all examples from this data set."""
 
-        return self._sentences, self._relations
+        return self._sentences, self._relations, self._lengths
 
 
 def read_data_sets(datafolder='/data/NYT/',
@@ -135,13 +142,14 @@ def read_data_sets(datafolder='/data/NYT/',
             data = pickle.load(f)
         relations = data['relations']
         sentences = data['sentences']
+        lengths = data['lengths']
 
     else:
         print('no pre-processed datafiles found: rebuild them')
-        relations, sentences = process_data(datafolder, vocab_size, rel_vocab_size)
+        relations, sentences, lengths = process_data(datafolder, vocab_size, rel_vocab_size)
 
         print('pickle for reuse later')
-        data = {'relations': relations, 'sentences': sentences}
+        data = {'relations': relations, 'sentences': sentences, 'lengths': lengths}
         with open(picklefilepath, 'w') as f:
             pickle.dump(data, f)
 
@@ -150,17 +158,13 @@ def read_data_sets(datafolder='/data/NYT/',
     if not train_size:
         train_size = num_examples - validation_size - test_size
 
-    sentences_val, sentences = np.split(sentences, [validation_size])
-    sentences_test, sentences = np.split(sentences, [test_size])
-    sentences_train, sentences = np.split(sentences, [train_size])
+    sentences_train, sentences_val, sentences_test = split_arrays(sentences, train_size, validation_size, test_size)
+    relations_train, relations_val, relations_test = split_arrays(relations, train_size, validation_size, test_size)
+    lengths_train, lengths_val, lengths_test = split_arrays(lengths, train_size, validation_size, test_size)
 
-    relations_val, relations = np.split(relations, [validation_size])
-    relations_test, relations = np.split(relations, [test_size])
-    relations_train, relations = np.split(relations, [train_size])
-
-    data_sets.train = DataSet(sentences_train, relations_train)
-    data_sets.validation = DataSet(sentences_val, relations_val)
-    data_sets.test = DataSet(sentences_test, relations_test)
+    data_sets.train = DataSet(sentences_train, relations_train, lengths_train)
+    data_sets.validation = DataSet(sentences_val, relations_val, lengths_val)
+    data_sets.test = DataSet(sentences_test, relations_test, lengths_test)
 
     return data_sets
 
@@ -185,7 +189,7 @@ def filter_data(data):
     # shuffle rows
     data_filtered = data_filtered.sample(frac=1)
 
-    print('filtered dataset created')
+    print('filtered data created: %i POSITIVE and %i NEGATIVE' % (pos_count, pos_count))
 
     labels = data_filtered['labels']
     relations = data_filtered['relations']
@@ -227,6 +231,10 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     print('vectorize masked sentences')
     vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
 
+    print('count sentence lengths')
+    sentence_lengths = [len(sentence) for sentence in vectorized_sentences]
+    sentence_lengths = np.array(sentence_lengths)
+
     print('pad sentences to common length')
     for sentence in vectorized_sentences:
         sentence += [PAD_ID] * (max_sentence_length - len(sentence))
@@ -255,7 +263,7 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     # make relations onehot
     onehot_relations = dense_to_one_hot(vectorized_relations, num_classes=rel_vocab_size)
 
-    return onehot_relations, vectorized_sentences
+    return onehot_relations, vectorized_sentences, sentence_lengths
 
 
 def read_data(filename):
@@ -317,6 +325,8 @@ def build_vocab_list(sentences, vocab_size):
         for w in tokens:
             # swap digits for 0
             word = re.sub(_DIGIT_RE, "0", w)
+            # make lower case
+            word = word.lower()
             if word in vocab:
                 vocab[word] += 1
             else:
@@ -375,6 +385,41 @@ def dense_to_one_hot(dense, num_classes=10):
     one_hot = np.zeros((num_examples, num_classes), dtype=np.float32)
     one_hot.flat[index_offset + dense] = 1.
     return one_hot
+
+
+def split_arrays(arr, train_size, validation_size, test_size):
+    assert validation_size + test_size + train_size <= arr.shape[0]
+
+    arr_val, arr = np.split(arr, [validation_size])
+    arr_test, arr = np.split(arr, [test_size])
+    arr_train, arr = np.split(arr, [train_size])
+
+    return arr_train, arr_val, arr_test
+
+
+def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
+    embedfilepath = embed_folder + 'glove.6B.%id.txt' % embed_size
+    vocabfilepath = vocab_folder + 'vocab_%i.txt' % vocab_size
+
+    # read pre-cooked embeddings and vocab list
+    embed = pd.read_csv(embedfilepath, delim_whitespace=True, quoting=csv.QUOTE_NONE, header=None)
+    vocab = pd.read_csv(vocabfilepath, delim_whitespace=True, quoting=csv.QUOTE_NONE, header=None)
+
+    # merge where vocab words exist in embeddings
+    vocab_embed = vocab.merge(embed, how='left', on=0)
+
+    # generate random embeddings to patch missing values
+    sigma = 0.6
+    embed_rand = pd.DataFrame(sigma * np.random.randn(vocab_embed.shape[0], vocab_embed.shape[1]))
+
+    # patch missing with random values [drop 1st col of word strings]
+    vocab_embed = vocab_embed.drop(0, axis=1)
+    embed_rand = embed_rand.drop(0, axis=1)
+    vocab_embed = vocab_embed.fillna(embed_rand)
+
+    embedding = np.array(vocab_embed.values, dtype=np.float32)
+
+    return embedding
 
 
 if __name__ == "__main__":

@@ -11,38 +11,50 @@ from tensorflow.python.ops import rnn
 
 class RNNClassifierModel(object):
 
-    def __init__(self, config):
+    def __init__(self, config, init_embedding=None):
 
         # data placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
         self._y = tf.placeholder(dtype=tf.float32, shape=[None, config.rel_vocab_size], name='labels')
         # self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
+        self._lengths = tf.placeholder(dtype=tf.int32, shape=[None], name='lengths')
 
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
         # embedding
         with tf.device("/cpu:0"), tf.name_scope('Embedding'):
-            embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
+            if init_embedding is not None:
+                embedding = tf.Variable(init_embedding, name='embedding')
+            else:
+                embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
             inputs = tf.nn.embedding_lookup(embedding, self._x)
 
-        # RNN
+        lengths = self._lengths
+
+        # bi-RNN
         with tf.variable_scope("RNN"):
             # LSTM cell
-            cell = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
+            cell_fw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
+            cell_bw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
             # Dropout
-            cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=self._dropout_keep_prob)
+            cell_fw = rnn_cell.DropoutWrapper(cell_fw, output_keep_prob=self._dropout_keep_prob)
+            cell_bw = rnn_cell.DropoutWrapper(cell_bw, output_keep_prob=self._dropout_keep_prob)
             # Multilayer
-            cell = rnn_cell.MultiRNNCell([cell] * config.num_layers)
+            cell_fw = rnn_cell.MultiRNNCell([cell_fw] * config.num_layers)
+            cell_bw = rnn_cell.MultiRNNCell([cell_bw] * config.num_layers)
             # RNN
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
-            outputs, state = rnn.rnn(cell, inputs, dtype=tf.float32)
-            output = outputs[-1]
-            self._final_state = state
+
+            outputs, output_state_fw, output_state_bw = tf.nn.bidirectional_rnn(cell_fw, cell_bw, inputs,
+                                                                                dtype=tf.float32,
+                                                                                sequence_length=lengths)
+
+            output = tf.concat(1, [output_state_fw, output_state_bw])
 
         # Linear transform
         with tf.name_scope('Logits'):
-            W = tf.get_variable("W", [config.hidden_size, config.rel_vocab_size])
+            W = tf.get_variable("W", [config.hidden_size*4, config.rel_vocab_size])
             b = tf.get_variable("b", [config.rel_vocab_size])
             logits = tf.matmul(output, W) + b
 
@@ -102,6 +114,10 @@ class RNNClassifierModel(object):
     @property
     def targets(self):
         return self._y
+
+    @property
+    def lengths(self):
+        return self._lengths
 
     @property
     def predictions(self):
