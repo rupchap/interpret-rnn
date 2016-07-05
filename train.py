@@ -123,9 +123,9 @@ def main():
                 pred_byclass = sess.run(m.pred_byclass, feed_dict=feed_dict)
                 print('class prediction count:')
                 print(pred_byclass)
-                # actual_byclass = sess.run(m.actual_byclass, feed_dict=feed_dict)
-                # print('class actual count:')
-                # print(actual_byclass)
+                actual_byclass = sess.run(m.actual_byclass, feed_dict=feed_dict)
+                print('class actual count:')
+                print(actual_byclass)
 
                 # decay learning rate if not improving
                 if len(previous_val_costs) > 2 and cost_val > max(previous_val_costs[-3:]):

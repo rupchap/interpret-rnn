@@ -5,7 +5,6 @@ from __future__ import print_function
 
 import re
 import os
-import ast
 import numpy as np
 import pandas as pd
 import csv
@@ -180,16 +179,20 @@ def filter_data(data):
     print('data includes %i POSITIVE, %i NEGATIVE, %i UNLABELED.'
           % (pos_count, neg_count, unl_count))
 
-    # Filter dataset to equal numbers of positive and negative cases. drop UNLABELED
+    # Filter dataset to required number of positive and negative cases. drop UNLABELED
+    pos_req = pos_count
+    # get equal number of negatives
+    # neg_req = pos_count
+    # get NO negatives
+    neg_req = 0
     data = pd.DataFrame({'labels': labels, 'relations': relations,
                          'sentences': sentences, 'entAs': entAs, 'entBs': entBs})
-    pos = data[data['labels'] == 'POSITIVE']
-    neg = data[data['labels'] == 'NEGATIVE'].sample(n=pos_count)
+    pos = data[data['labels'] == 'POSITIVE'].sample(n=pos_req)
+    neg = data[data['labels'] == 'NEGATIVE'].sample(n=neg_req)
     data_filtered = pd.concat([pos, neg])
     # shuffle rows
     data_filtered = data_filtered.sample(frac=1)
-
-    print('filtered data created: %i POSITIVE and %i NEGATIVE' % (pos_count, pos_count))
+    print('filtered data created: %i POSITIVE and %i NEGATIVE' % (pos.shape[0], neg.shape[0]))
 
     labels = data_filtered['labels']
     relations = data_filtered['relations']
@@ -230,6 +233,10 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 
     print('vectorize masked sentences')
     vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
+
+    print('make short sentences')
+    # extract vectors representing text between entities
+    short_sentences = shorten_sentences(vectorized_sentences)
 
     print('count sentence lengths')
     sentence_lengths = [len(sentence) for sentence in vectorized_sentences]
@@ -304,6 +311,16 @@ def extract_column_by_prefix(list_of_tab_separated_values, prefix):
 
 def mask_entities_in_sentence(sen, entA, entB):
     return sen.replace(entA, _ENTA).replace(entB, _ENTB)
+
+
+def shorten_sentence(sen, entA, entB):
+    start = sen.find(entA) + len(entA) + 1
+    end = sen.find(entB) - 1
+    return sen[start:end]
+
+def shorten_sentences(vectorized_sentences):
+    for sen in vectorized_sentences:
+        start = sen.index()
 
 
 def basic_tokenizer(sentence):
@@ -408,9 +425,15 @@ def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
     # merge where vocab words exist in embeddings
     vocab_embed = vocab.merge(embed, how='left', on=0)
 
-    # generate random embeddings to patch missing values
-    sigma = 0.6
-    embed_rand = pd.DataFrame(sigma * np.random.randn(vocab_embed.shape[0], vocab_embed.shape[1]))
+    embed_count = embed.shape[0]
+    vocab_count = vocab.shape[0]
+    notfound_embed_count = vocab_embed[1].isnull().sum()
+    print('vocab size: %i, pre-trained embeddings: %i, vocab not found in pretrained: %i (%f)' %
+          (vocab_count, embed_count, notfound_embed_count, 1. * notfound_embed_count / vocab_count))
+
+    # generate random embeddings to patch missing values [assume mean 0, match stdev of full embed data]
+    embed_stdev = embed.drop(0, axis=1).std(axis=0).mean()
+    embed_rand = pd.DataFrame(embed_stdev * np.random.randn(vocab_embed.shape[0], vocab_embed.shape[1]))
 
     # patch missing with random values [drop 1st col of word strings]
     vocab_embed = vocab_embed.drop(0, axis=1)
