@@ -291,7 +291,18 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     return data
 
 
-def read_data(filename):
+def read_data_from_individual_files(srcfolder):
+
+    data = dict()
+    field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels')
+
+    for field in field_list:
+        srcfile = srcfolder + field + '.txt'
+        data[field] = get_list_from_file(srcfile)
+
+    return data
+
+def read_data_from_source(filename):
     """ reads in data from specified file, extracts fields and returns as a dict.
     :param filename: source text file NYT-freebase corpus
     :return: data dict.
@@ -307,21 +318,29 @@ def read_data(filename):
     lines = filter(lambda x: not x.startswith('#Document'), lines)
 
     # extract elements we need
-    data = dict()
-    data['labels'] = map(lambda x: x.split('\t')[0], lines)
-    data['entAs'] = map(lambda x: x.split('\t')[1], lines)
-    data['entBs'] = map(lambda x: x.split('\t')[2], lines)
-    data['relations'] = extract_column_by_prefix(lines, 'REL$')
-    data['sentences'] = extract_column_by_prefix(lines, 'sen#')
-    data['ners'] = extract_column_by_prefix(lines, 'ner#')
-    data['paths'] = extract_column_by_prefix(lines, 'path#')
-    data['pos'] = extract_column_by_prefix(lines, 'pos#')
-    data['lc'] = extract_column_by_prefix(lines, 'lc#')
-    data['rc'] = extract_column_by_prefix(lines, 'rc#')
-    data['lex'] = extract_column_by_prefix(lines, 'lex#')
-    data['trigger'] = extract_column_by_prefix(lines, 'trigger#')
 
     return data
+
+
+def save_data_by_field(data, destfolder):
+    """
+    create a text file for each list in data dictionary
+    :param data: {fieldname: list}
+    :param destfolder: folder in which datafiles to be saved
+    :return: -
+    """
+
+    # create destination folder if doesn't exist.
+    try:
+        os.makedirs(destfolder)
+    except OSError:
+        if not os.path.isdir(destfolder):
+            raise
+
+    for key in data.keys():
+        destfile = destfolder + key + '.txt'
+        print('save %s as %s' % (key, destfile))
+        save_list_to_file(data[key], destfile)
 
 
 def find_first_str_starting_with_prefix(list_of_strings, prefix):
@@ -356,10 +375,6 @@ def shorten_sentence(sen, entA, entB):
     start = sen.find(entA) + len(entA) + 1
     end = sen.find(entB) - 1
     return sen[start:end]
-
-def shorten_sentences(vectorized_sentences):
-    for sen in vectorized_sentences:
-        start = sen.index()
 
 
 def basic_tokenizer(sentence):
@@ -484,12 +499,9 @@ def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
     return embedding
 
 
-def save_paths_to_file(src='/data/NYT/nyt-freebase.train.triples.universal.mention.txt',
-                       dest='data/NYT/extracted_paths.txt'):
-    data = read_data(src)
-
-
-
-
 if __name__ == "__main__":
-    main()
+    # data = read_data_from_source('/data/NYT/nyt-freebase.train.triples.universal.mention.txt')
+    # save_data_by_field(data, '/data/train/')
+    data = read_data_from_individual_files('/data/train/')
+    print(data.keys())
+    # main()
