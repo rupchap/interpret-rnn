@@ -5,6 +5,9 @@
 // import ml.wolfe.util.Conf
 // import uclmr.io.LoadNAACL
 
+import scala.io.Source
+
+
 /**
  * @author riedel
  */
@@ -122,7 +125,13 @@ object PathRenderer {
     "path#appos|<-appos<-director<-dep<-directed->partmod->release->prep->by->pobj->|pobj"
   )
 
+
   def main(args: Array[String]) {
+  	val filename = "/data/NYT/nyt-freebase.test.subsample-10000-LABELED.tuples.txt"
+  	for (line <- Source.fromFile(filename).getLines) {
+      println(line)
+    }
+
     for (path <- examplePaths)
       println(render(path, "_ENTA", "_ENTB"))
   }

@@ -57,40 +57,16 @@ def main():
 
 class DataSet(object):
 
-    def __init__(self, sentences, relations, lengths):
+    def __init__(self, data):
         """Construct a DataSet.
         """
 
-        # Check matching number of examples
-        assert sentences.shape[0] == relations.shape[0], (
-            'sentences.shape: %s relations.shape: %s' % (sentences.shape[0], relations.shape))
-
-        self._num_examples = sentences.shape[0]
-        self._sentences = sentences
-        self._relations = relations
-        self._lengths = lengths
+        self._sentences = data['sentences']
+        self._relations = data['relations']
+        self._lengths = data['lengths']
+        self._num_examples = self._sentences.shape[0]
         self._epochs_completed = 0
         self._index_in_epoch = 0
-
-    @property
-    def sentences(self):
-        return self._sentences
-
-    @property
-    def relations(self):
-        return self._relations
-
-    @property
-    def lengths(self):
-        return self._lengths
-
-    @property
-    def num_examples(self):
-        return self._num_examples
-
-    @property
-    def epochs_completed(self):
-        return self._epochs_completed
 
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
@@ -121,8 +97,63 @@ class DataSet(object):
 
     def get_all(self):
         """Return all examples from this data set."""
-
         return self._sentences, self._relations, self._lengths
+
+    @property
+    def sentences(self):
+        return self._sentences
+
+    @property
+    def relations(self):
+        return self._relations
+
+    @property
+    def lengths(self):
+        return self._lengths
+
+    @property
+    def num_examples(self):
+        return self._num_examples
+
+    @property
+    def epochs_completed(self):
+        return self._epochs_completed
+
+
+def get_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+    # if pickled data already exist then load it
+    picklefilepath = datafolder + 'data_%i_%i.pkl' % (vocab_size, rel_vocab_size)
+    if os.path.isfile(picklefilepath):
+        print('load pre-processed data')
+        with open(picklefilepath, 'r') as f:
+            data = pickle.load(f)
+    # otherwise re-process original data and pickle.
+    else:
+        print('no pre-processed datafiles found: rebuild them')
+        data = process_data(datafolder, vocab_size, rel_vocab_size)
+
+        print('pickle for reuse later')
+        with open(picklefilepath, 'w') as f:
+            pickle.dump(data, f)
+
+    return data
+
+
+def split_data(data, split_size):
+    """ takes a dict of arrays and splits into two dicts, one of size split_size other of remainder
+    :param data: dict of numpy arrays, all of same length in 1st axis
+    :param split_size: int number of rows to be included in first split
+    :return: data_top [dict of size split_size], data_btm [dict of remainder]
+    """
+    data_top = dict()
+    data_btm = dict()
+
+    for key in data.keys:
+        val_top, val_btm = np.split(data[key], split_size)
+        data_top[key] = val_top
+        data_btm[key] = val_btm
+
+    return data_top, data_btm
 
 
 def read_data_sets(datafolder='/data/NYT/',
@@ -133,37 +164,26 @@ def read_data_sets(datafolder='/data/NYT/',
         pass
     data_sets = DataSets()
 
-    # check if pickled data already exist
-    picklefilepath = datafolder + 'data_%i_%i.pkl' % (vocab_size, rel_vocab_size)
-    if os.path.isfile(picklefilepath):
-        print('load pre-processed data')
-        with open(picklefilepath, 'r') as f:
-            data = pickle.load(f)
-        relations = data['relations']
-        sentences = data['sentences']
-        lengths = data['lengths']
-
-    else:
-        print('no pre-processed datafiles found: rebuild them')
-        relations, sentences, lengths = process_data(datafolder, vocab_size, rel_vocab_size)
-
-        print('pickle for reuse later')
-        data = {'relations': relations, 'sentences': sentences, 'lengths': lengths}
-        with open(picklefilepath, 'w') as f:
-            pickle.dump(data, f)
+    data = get_data(datafolder=datafolder, vocab_size=vocab_size, rel_vocab_size=rel_vocab_size)
+    relations = data['relations']
+    sentences = data['sentences']
+    lengths = data['lengths']
 
     # slice for training, validation, test datasets
     num_examples = sentences.shape[0]
     if not train_size:
         train_size = num_examples - validation_size - test_size
 
-    sentences_train, sentences_val, sentences_test = split_arrays(sentences, train_size, validation_size, test_size)
-    relations_train, relations_val, relations_test = split_arrays(relations, train_size, validation_size, test_size)
-    lengths_train, lengths_val, lengths_test = split_arrays(lengths, train_size, validation_size, test_size)
 
-    data_sets.train = DataSet(sentences_train, relations_train, lengths_train)
-    data_sets.validation = DataSet(sentences_val, relations_val, lengths_val)
-    data_sets.test = DataSet(sentences_test, relations_test, lengths_test)
+    # todo: write subfunction to split any data dict into new dict with arrays of req'd lengths.
+
+    data_train, data_rem = split_data(data, train_size)
+    data_val, data_rem = split_data(data_rem, validation_size)
+    data_test, _ = split_data(data_rem, test_size)
+
+    data_sets.train = DataSet(data_train)
+    data_sets.validation = DataSet(data_val)
+    data_sets.test = DataSet(data_test)
 
     return data_sets
 
@@ -209,7 +229,7 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     # labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)
     data = read_data(datafolder+sourcefilename)
 
-    print('imported %i examples from %s' % (len(data[0]), sourcefilename))
+    print('imported %i examples from %s' % (len(data.values()[0]), sourcefilename))
 
     print('FILTER DATA')
     labels, relations, sentences, entAs, entBs = filter_data(data)
@@ -233,10 +253,6 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 
     print('vectorize masked sentences')
     vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
-
-    print('make short sentences')
-    # extract vectors representing text between entities
-    short_sentences = shorten_sentences(vectorized_sentences)
 
     print('count sentence lengths')
     sentence_lengths = [len(sentence) for sentence in vectorized_sentences]
@@ -270,10 +286,16 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     # make relations onehot
     onehot_relations = dense_to_one_hot(vectorized_relations, num_classes=rel_vocab_size)
 
-    return onehot_relations, vectorized_sentences, sentence_lengths
+    data = {'relations': onehot_relations, 'sentences': vectorized_sentences, 'lengths': sentence_lengths}
+
+    return data
 
 
 def read_data(filename):
+    """ reads in data from specified file, extracts fields and returns as a dict.
+    :param filename: source text file NYT-freebase corpus
+    :return: data dict.
+    """
     # Open file and read in lines
     with open(filename, 'r') as f:
         lines = f.readlines()
@@ -285,18 +307,29 @@ def read_data(filename):
     lines = filter(lambda x: not x.startswith('#Document'), lines)
 
     # extract elements we need
-    labels = map(lambda x: x.split('\t')[0], lines)
-    entAs = map(lambda x: x.split('\t')[1], lines)
-    entBs = map(lambda x: x.split('\t')[2], lines)
-    relations = extract_column_by_prefix(lines, 'REL$')
-    sentences = extract_column_by_prefix(lines, 'sen#')
+    data = dict()
+    data['labels'] = map(lambda x: x.split('\t')[0], lines)
+    data['entAs'] = map(lambda x: x.split('\t')[1], lines)
+    data['entBs'] = map(lambda x: x.split('\t')[2], lines)
+    data['relations'] = extract_column_by_prefix(lines, 'REL$')
+    data['sentences'] = extract_column_by_prefix(lines, 'sen#')
+    data['ners'] = extract_column_by_prefix(lines, 'ner#')
+    data['paths'] = extract_column_by_prefix(lines, 'path#')
+    data['pos'] = extract_column_by_prefix(lines, 'pos#')
+    data['lc'] = extract_column_by_prefix(lines, 'lc#')
+    data['rc'] = extract_column_by_prefix(lines, 'rc#')
+    data['lex'] = extract_column_by_prefix(lines, 'lex#')
+    data['trigger'] = extract_column_by_prefix(lines, 'trigger#')
 
-    return labels, relations, sentences, entAs, entBs
+    return data
 
 
 def find_first_str_starting_with_prefix(list_of_strings, prefix):
-    # return first instance of a string prefixed by prefix from a list of strings, or None.
-    # matching string is returned with prefix removed
+    """ return first instance of a string prefixed by prefix from a list of strings, or None.
+    :param list_of_strings: list of strings to search
+    :param prefix: str prefix appearing at start of required string
+    :return: string matching prefix pattern (with prefix removed)
+    """
     return next((i[len(prefix):] for i in list_of_strings if i.startswith(prefix)), None)
 
 
@@ -310,6 +343,12 @@ def extract_column_by_prefix(list_of_tab_separated_values, prefix):
 
 
 def mask_entities_in_sentence(sen, entA, entB):
+    """ replace specified entities by masking token.
+    :param sen: string to parse for entities to be masked
+    :param entA: str entity A to search for
+    :param entB: str entity B to search for
+    :return: masked string - entity A replaced by global _ENTA, entity by by _ENTB
+    """
     return sen.replace(entA, _ENTA).replace(entB, _ENTB)
 
 
@@ -443,6 +482,13 @@ def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
     embedding = np.array(vocab_embed.values, dtype=np.float32)
 
     return embedding
+
+
+def save_paths_to_file(src='/data/NYT/nyt-freebase.train.triples.universal.mention.txt',
+                       dest='data/NYT/extracted_paths.txt'):
+    data = read_data(src)
+
+
 
 
 if __name__ == "__main__":
