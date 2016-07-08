@@ -11,3 +11,6 @@
 
 # tensorboard logs
 tflogs/
+
+# scala classes
+PathRenderer/*.class
