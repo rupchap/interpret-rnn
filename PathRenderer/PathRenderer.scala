@@ -6,6 +6,9 @@
 // import uclmr.io.LoadNAACL
 
 import scala.io.Source
+import scala.collection.mutable.ArrayBuffer
+import java.io.File
+import java.io.PrintWriter
 
 
 /**
@@ -14,9 +17,9 @@ import scala.io.Source
 object PathRenderer {
 
   def render(path: String, arg1: String = "A1", arg2: String  = "A2"): String = {
-    if(path.startsWith("REL")) {
-      return s"$arg1${FreebaseStrings.phrase(path)}$arg2" //KB:
-    }
+    // if(path.startsWith("REL")) {
+    //   return s"$arg1${FreebaseStrings.phrase(path)}$arg2" //KB:
+    // }
     val Array(_, middle, _) = path.split("\\|")
     val steps = middle.split("(?=->)|(?<=->)|(?=<-)|(?<=<-)").filter(_ != "")
     val inverse = path.endsWith("INV")
@@ -87,8 +90,9 @@ object PathRenderer {
     }
 
     renderSteps(padded.toList).zipWithIndex.map(p => if(p._2==0) p._1 else {
-      if(p._1.startsWith(",") || p._1.startsWith("'")) p._1
-      else " " + p._1
+      // if(p._1.startsWith(",") || p._1.startsWith("'")) p._1
+      // else " " + p._1
+      " " + p._1
     }).mkString("")
 
   }
@@ -127,13 +131,19 @@ object PathRenderer {
 
 
   def main(args: Array[String]) {
-  	val filename = "/data/NYT/nyt-freebase.test.subsample-10000-LABELED.tuples.txt"
-  	for (line <- Source.fromFile(filename).getLines) {
-      println(line)
-    }
+  	val filename = "/data/train/paths.txt"
+    var sentences = ArrayBuffer[String]()
 
-    for (path <- examplePaths)
-      println(render(path, "_ENTA", "_ENTB"))
+  	for (line <- Source.fromFile(filename).getLines)
+      sentences += render("path#" + line, "_ENTA", "_ENTB")
+
+    val writer = new PrintWriter(new File("/data/train/shortsentences.txt"))
+    for (line <- sentences)
+      writer.println(line)
+    writer.close()
+
+
+
   }
 
 }
