@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import csv
 import cPickle as pickle
-from collections import Counter
+from collections import Counter, defaultdict
+
 
 sourcefilename = 'nyt-freebase.train.triples.universal.mention.txt'
 
@@ -18,24 +19,21 @@ _DIGIT_RE = re.compile(r"\d")
 _WORD_SPLIT = ' '
 
 # Special vocabulary symbols
-_UNK = '_UNK'
-_PAD = '_PAD'
-_GO = '_GO'
-_EOS = '_EOS'
-_START_VOCAB = [_UNK, _PAD, _GO, _EOS]
+_PAD = '_pad'
+_UNK = '_unk'
+_GO = '_go'
+_EOS = '_eos'
+_START_VOCAB = [ _PAD, _UNK, _GO, _EOS]
 
-UNK_ID = 0
-PAD_ID = 1
+
+PAD_ID = 0
+UNK_ID = 1
 GO_ID = 2
 EOS_ID = 3
 
 # Symbols for masked entities
-_ENTA = '_ENTA'
-_ENTB = '_ENTB'
-
-# We will pad all sentences with _PAD up to max_sentence_length
-# RNN in tensorflow currently requires constant sentence length
-max_sentence_length = 104
+_ENTA = '_enta'
+_ENTB = '_entb'
 
 
 def main():
@@ -120,7 +118,7 @@ class DataSet(object):
         return self._epochs_completed
 
 
-def get_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+def get_data(datafolder='/data/train/', vocab_size=10000, rel_vocab_size=10):
     # if pickled data already exist then load it
     picklefilepath = datafolder + 'data_%i_%i.pkl' % (vocab_size, rel_vocab_size)
     if os.path.isfile(picklefilepath):
@@ -130,7 +128,7 @@ def get_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
     # otherwise re-process original data and pickle.
     else:
         print('no pre-processed datafiles found: rebuild them')
-        data = process_data(datafolder, vocab_size, rel_vocab_size)
+        data = build_data(datafolder, vocab_size, rel_vocab_size)
 
         print('pickle for reuse later')
         with open(picklefilepath, 'w') as f:
@@ -138,6 +136,30 @@ def get_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 
     return data
 
+
+def build_data_sets(data, validation_size=5000, test_size=500, train_size=0):
+    class DataSets(object):
+        pass
+    data_sets = DataSets()
+
+    relations = data['relations']
+    sentences = data['sentences']
+    lengths = data['lengths']
+
+    # slice for training, validation, test datasets
+    num_examples = sentences.shape[0]
+    if not train_size:
+        train_size = num_examples - validation_size - test_size
+
+    data_train, data_rem = split_data(data, train_size)
+    data_val, data_rem = split_data(data_rem, validation_size)
+    data_test, _ = split_data(data_rem, test_size)
+
+    data_sets.train = DataSet(data_train)
+    data_sets.validation = DataSet(data_val)
+    data_sets.test = DataSet(data_test)
+
+    return data_sets
 
 def split_data(data, split_size):
     """ takes a dict of arrays and splits into two dicts, one of size split_size other of remainder
@@ -156,99 +178,57 @@ def split_data(data, split_size):
     return data_top, data_btm
 
 
-def read_data_sets(datafolder='/data/NYT/',
-                   vocab_size=10000, rel_vocab_size=25,
-                   validation_size=5000, test_size=500,
-                   train_size=0):
-    class DataSets(object):
-        pass
-    data_sets = DataSets()
+def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=True):
 
-    data = get_data(datafolder=datafolder, vocab_size=vocab_size, rel_vocab_size=rel_vocab_size)
-    relations = data['relations']
-    sentences = data['sentences']
-    lengths = data['lengths']
+    data_df = pd.DataFrame(data)
 
-    # slice for training, validation, test datasets
-    num_examples = sentences.shape[0]
-    if not train_size:
-        train_size = num_examples - validation_size - test_size
+    counts_by_label = data_df.groupby(['labels']).size()
+    print('Original data:')
+    print(counts_by_label)
+    pos_count, neg_count, unl_count = counts_by_label[['POSITIVE', 'NEGATIVE', 'UNLABELED']]
 
-
-    # todo: write subfunction to split any data dict into new dict with arrays of req'd lengths.
-
-    data_train, data_rem = split_data(data, train_size)
-    data_val, data_rem = split_data(data_rem, validation_size)
-    data_test, _ = split_data(data_rem, test_size)
-
-    data_sets.train = DataSet(data_train)
-    data_sets.validation = DataSet(data_val)
-    data_sets.test = DataSet(data_test)
-
-    return data_sets
-
-
-def filter_data(data):
-
-    # unpack data tuple
-    labels, relations, sentences, entAs, entBs = data
-
-    pos_count = labels.count('POSITIVE')
-    neg_count = labels.count('NEGATIVE')
-    unl_count = labels.count('UNLABELED')
-    print('data includes %i POSITIVE, %i NEGATIVE, %i UNLABELED.'
-          % (pos_count, neg_count, unl_count))
-
-    # Filter dataset to required number of positive and negative cases. drop UNLABELED
+    # Filter dataset to required number of cases of different label types
     pos_req = pos_count
-    # get equal number of negatives
-    # neg_req = pos_count
-    # get NO negatives
-    neg_req = 0
-    data = pd.DataFrame({'labels': labels, 'relations': relations,
-                         'sentences': sentences, 'entAs': entAs, 'entBs': entBs})
-    pos = data[data['labels'] == 'POSITIVE'].sample(n=pos_req)
-    neg = data[data['labels'] == 'NEGATIVE'].sample(n=neg_req)
-    data_filtered = pd.concat([pos, neg])
+    if keep_negative:
+        if equal_posneg:
+            neg_req = min(pos_req, neg_count)
+            pos_req = min(neg_req, pos_req)
+        else:
+            neg_req = neg_count
+    else:
+        neg_req = 0
+
+    if keep_unlabeled:
+        unl_req = unl_count
+    else:
+        unl_req = 0
+
+    pos = data_df[data_df['labels'] == 'POSITIVE'].sample(n=pos_req)
+    neg = data_df[data_df['labels'] == 'NEGATIVE'].sample(n=neg_req)
+    unl = data_df[data_df['labels'] == 'UNLABELED'].sample(n=unl_req)
+    data_filtered_df = pd.concat([pos, neg, unl])
     # shuffle rows
-    data_filtered = data_filtered.sample(frac=1)
-    print('filtered data created: %i POSITIVE and %i NEGATIVE' % (pos.shape[0], neg.shape[0]))
+    data_filtered_df = data_filtered_df.sample(frac=1)
 
-    labels = data_filtered['labels']
-    relations = data_filtered['relations']
-    sentences = data_filtered['sentences']
-    entAs = data_filtered['entAs']
-    entBs = data_filtered['entBs']
+    counts_by_label = data_filtered_df.groupby(['labels']).size()
+    print('Filtered data:')
+    print(counts_by_label)
 
-    return labels, relations, sentences, entAs, entBs
+    data_filtered = data_filtered_df.to_dict(orient='list')
+
+    return data_filtered
 
 
-def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
+def process_data(data, vocab_size=10000, rel_vocab_size=25):
 
-    print('IMPORT DATA')
-    # labels, relations, sentences, entAs, entBs = read_data(datafolder+sourcefilename)
-    data = read_data(datafolder+sourcefilename)
+    sentences = data['sentences']
+    masked_sentences = data['masked_sentences']
 
-    print('imported %i examples from %s' % (len(data.values()[0]), sourcefilename))
-
-    print('FILTER DATA')
-    labels, relations, sentences, entAs, entBs = filter_data(data)
-
-    print('PROCESS SENTENCES')
-    print('parse sentences to mask entities')
-    masked_sentences = [mask_entities_in_sentence(sentence, entA, entB)
-                        for sentence, entA, entB in zip(sentences, entAs, entBs)]
-
-    print('get vocab')
+    print('build vocab')
     vocabfilename = 'vocab_%i.txt' % vocab_size
     vocabfilepath = datafolder + vocabfilename
-    if os.path.isfile(vocabfilepath):
-        print('import vocab from file')
-        vocab_list = get_list_from_file(vocabfilepath)
-    else:
-        print('build new vocab')
-        vocab_list = build_vocab_list(masked_sentences, vocab_size)
-        save_vocab_list_to_file(vocab_list, vocabfilepath)
+    vocab_list = build_vocab_list(masked_sentences, vocab_size)
+    save_vocab_list_to_file(vocab_list, vocabfilepath)
     vocab, reverse_vocab = build_vocab_and_reverse_vocab(vocab_list)
 
     print('vectorize masked sentences')
@@ -294,7 +274,7 @@ def process_data(datafolder='/data/NYT/', vocab_size=10000, rel_vocab_size=25):
 def read_data_from_individual_files(srcfolder):
 
     data = dict()
-    field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels')
+    field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels', 'shortsentences')
 
     for field in field_list:
         srcfile = srcfolder + field + '.txt'
@@ -361,14 +341,12 @@ def extract_column_by_prefix(list_of_tab_separated_values, prefix):
     return map(lambda x: find_first_str_starting_with_prefix(x.split('\t'), prefix), list_of_tab_separated_values)
 
 
-def mask_entities_in_sentence(sen, entA, entB):
-    """ replace specified entities by masking token.
-    :param sen: string to parse for entities to be masked
-    :param entA: str entity A to search for
-    :param entB: str entity B to search for
-    :return: masked string - entity A replaced by global _ENTA, entity by by _ENTB
-    """
-    return sen.replace(entA, _ENTA).replace(entB, _ENTB)
+def mask_entities_in_sentences(sentences, entAs, entBs):
+
+    masked_sentences = [sentence.replace(entA, '_ENTA').replace(entB, '_ENTB')
+                        for sentence, entA, entB in zip(sentences, entAs, entBs)]
+
+    return masked_sentences
 
 
 def shorten_sentence(sen, entA, entB):
@@ -392,12 +370,8 @@ def build_vocab_list(sentences, vocab_size):
         counter += 1
         if counter % 100000 == 0:
             print("  processing line %d" % counter)
-        tokens = basic_tokenizer(sentence)
-        for w in tokens:
-            # swap digits for 0
-            word = re.sub(_DIGIT_RE, "0", w)
-            # make lower case
-            word = word.lower()
+        words = basic_tokenizer(sentence)
+        for word in words:
             if word in vocab:
                 vocab[word] += 1
             else:
@@ -435,6 +409,11 @@ def vectorize_sentence(sentence, vocab):
         vectorized_sentence.append(word_ID)
 
     return vectorized_sentence
+
+
+def vectorize_sentences(sentences, vocab):
+    vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in sentences]
+    return vectorized_sentences
 
 
 def save_list_to_file(list_of_strings, filepath):
@@ -499,9 +478,105 @@ def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
     return embedding
 
 
-if __name__ == "__main__":
-    # data = read_data_from_source('/data/NYT/nyt-freebase.train.triples.universal.mention.txt')
-    # save_data_by_field(data, '/data/train/')
+def add_parsed_sentences_to_data(data):
+
+    sentences = data['sentences']
+    entAs = data['entAs']
+    entBs = data['entBs']
+
+    # mask entities
+    sentences = mask_entities_in_sentences(sentences, entAs, entBs)
+
+    # stem sentences
+    sentences = stem_sentences(sentences)
+
+    data['parsed_sentences'] = sentences
+
+    return data
+
+
+def stem_sentences(sentences):
+    """very basic stemmer; just replace all digits with zeros and make lower case
+    """
+    # swap digits for 0
+    sentences = [re.sub(_DIGIT_RE, "0", sentence) for sentence in sentences]
+    # make lower case
+    sentences = [sentence.lower() for sentence in sentences]
+
+    return sentences
+
+
+def extract_source_data(srcfolder='/data/NYT/nyt-freebase.train.triples.universal.mention.txt',
+                        dstfolder='/data/train/'):
+
+    data = read_data_from_source(srcfolder)
+    save_data_by_field(data, dstfolder)
+
+    print('data from %s saved by field in %s' % (srcfolder, dstfolder))
+
+
+def build_data(srcfolder='/data/train', vocab_size=10000, rel_vocab_size=10,
+               max_sentence_length=104, max_shortsentence_length=25):
+
     data = read_data_from_individual_files('/data/train/')
-    print(data.keys())
+
+    data = filter_data(data)
+
+    data['masked_sentences'] = mask_entities_in_sentences(data['sentences'],
+                                                          data['entAs'],
+                                                          data['entBs'])
+
+    data['stemmed_sentences'] = stem_sentences(data['masked_sentences'])
+
+    vocab_list = build_vocab_list(data['stemmed_sentences'], vocab_size)
+    vocab, rev_vocab = build_vocab_and_reverse_vocab(vocab_list)
+
+    data['sentence_vecs'] = vectorize_sentences(data['stemmed_sentences'], vocab)
+
+    data['sentence_lengths'] = [len(sentence) for sentence in data['sentence_vecs']]
+
+    sentence_pad_vecs = [sentence + [PAD_ID] * (max_sentence_length - len(sentence)) for
+                         sentence in data['sentence_vecs']]
+    data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
+
+    data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
+
+    data['shortsentence_vecs'] = vectorize_sentences(data['stemmed_shortsentences'], vocab)
+
+    data['shortsentence_lengths'] = [len(sentence) for sentence in data['shortsentence_vecs']]
+
+    shortsentence_pad_vecs = [sentence + [PAD_ID] * (max_shortsentence_length - len(sentence)) for
+                              sentence in data['shortsentence_vecs']]
+    data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
+
+    rel_counter = Counter(data['relations'])
+    rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
+    rel_vocab_list = rel_vocab_list[:rel_vocab_size]
+    rel_vocab, rel_reverse_vocab = build_vocab_and_reverse_vocab(rel_vocab_list)
+
+    relation_vecs = [rel_vocab.get(relation, UNK_ID) for relation in data['relations']]
+    data['relation_vecs'] = np.array(relation_vecs, np.int32)
+
+    return data
+
+if __name__ == "__main__":
+
+    data = build_data(srcfolder='/data/train', vocab_size=10000, rel_vocab_size=10)
+
+    print(data['sentences'][5])
+    print(data['masked_sentences'][5])
+    print(data['stemmed_sentences'][5])
+    print(data['sentence_vecs'][5])
+    print(data['sentence_pad_vecs'][5])
+
+    print(data['shortsentences'][5])
+    print(data['stemmed_shortsentences'][5])
+    print(data['shortsentence_vecs'][5])
+    print(data['shortsentence_pad_vecs'][5])
+
+    print(data['relations'][5])
+    print(data['relation_vecs'][5])
+
+    print(data['labels'][5])
+
     # main()
