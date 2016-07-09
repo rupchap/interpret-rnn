@@ -131,13 +131,16 @@ object PathRenderer {
 
 
   def main(args: Array[String]) {
-  	val filename = "/data/train/paths.txt"
-    var sentences = ArrayBuffer[String]()
+  	val datafolder = args(0)
+  	val srcfile = datafolder + "paths.txt"
+  	val dstfile = datafolder + "shortsentences.txt"
+  	println(srcfile)
+  	var sentences = ArrayBuffer[String]()
 
-  	for (line <- Source.fromFile(filename).getLines)
-      sentences += render("path#" + line, "_ENTA", "_ENTB")
+  	for (line <- Source.fromFile(srcfile).getLines)
+      sentences += render("path#" + line, "_enta", "_entb")
 
-    val writer = new PrintWriter(new File("/data/train/shortsentences.txt"))
+    val writer = new PrintWriter(new File(dstfile))
     for (line <- sentences)
       writer.println(line)
     writer.close()
