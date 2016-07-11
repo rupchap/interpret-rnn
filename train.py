@@ -7,19 +7,13 @@ from tensorflow.python.ops import rnn
 import time
 
 from model import RNNClassifierModel
+from datasets import *
 
 # To run tensorboard:
 # tensorboard --logdir=/tmp/tflogs
 
-# file locations
-datafolder = '/data/NYT/'
-logfolder = '/tmp/tflogs/' + time.strftime("%Y%m%d-%H%M%S") + '/'
-save_path = '/tmp/tfmodel.ckpt'
-embedfolder = '/data/glove/'
 
-
-class SmallConfig(object):
-    """Small config."""
+class Config(object):
     init_scale = 0.1
     learning_rate = 0.1
     lr_decay = 1
@@ -30,6 +24,7 @@ class SmallConfig(object):
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     hidden_size = 150
     max_sentence_length = 104
+    max_shortsentence_length = 10
     rel_vocab_size = 8
 
     dropout_keep_prob = 1.
@@ -43,20 +38,25 @@ class SmallConfig(object):
     report_step = 1000
     save_step = 10000
 
+    srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
+    datafolder = '/data/train/'
+    logfolder = '/tmp/tflogs/' + time.strftime("%Y%m%d-%H%M%S") + '/'
+    save_path = '/tmp/tfmodel.ckpt'
+    embedfolder = '/data/glove/'
+
 
 def main():
 
-    config = SmallConfig()
+    config = Config()
 
     print('LOAD DATA')
-    datasets = read_data_sets(datafolder, config.vocab_size, config.rel_vocab_size,
-                              config.validation_size, config.test_size)
+    datasets = get_datasets(config)
     print('%i training examples loaded' % datasets.train.num_examples)
     num_epochs = (1.0 * config.training_steps * config.batch_size) / datasets.train.num_examples
     print('%i steps of %i-batches = %f epochs' % (config.training_steps, config.batch_size, num_epochs))
 
     print('GET INITIAL WORD EMBEDDINGS')
-    init_embedding = build_initial_embedding(embedfolder, datafolder, config.embed_size, config.vocab_size)
+    init_embedding = build_initial_embedding(config)
 
     print('BUILD GRAPH')
     m = RNNClassifierModel(config=config, init_embedding=init_embedding)

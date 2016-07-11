@@ -9,22 +9,22 @@ import numpy as np
 import pandas as pd
 import csv
 import cPickle as pickle
+import subprocess
 from collections import Counter, defaultdict
 
-
-sourcefilename = 'nyt-freebase.train.triples.universal.mention.txt'
+from data_utils import *
+from datasets import *
 
 # regex for digits
 _DIGIT_RE = re.compile(r"\d")
 _WORD_SPLIT = ' '
 
-# Special vocabulary symbols
+# Special vocab symbols
 _PAD = '_pad'
 _UNK = '_unk'
 _GO = '_go'
 _EOS = '_eos'
-_START_VOCAB = [ _PAD, _UNK, _GO, _EOS]
-
+_START_VOCAB = [_PAD, _UNK, _GO, _EOS]
 
 PAD_ID = 0
 UNK_ID = 1
@@ -36,8 +36,23 @@ _ENTA = '_enta'
 _ENTB = '_entb'
 
 
+class DataConfig(object):
+    vocab_size = 10000
+    embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
+    max_sentence_length = 104
+    max_shortsentence_length = 10
+    rel_vocab_size = 8
+    train_size = 0  # 0 to use all remaining data for training.
+    validation_size = 5000
+    test_size = 500
+    srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
+    datafolder = '/data/train/'
+    embedfolder = '/data/glove/'
+
+
 def main():
-    datasets = read_data_sets()
+
+    datasets = get_datasets(config=DataConfig())
     sen, rel = datasets.train.next_batch(5)
     print('training sample:')
     for s in sen:
@@ -53,82 +68,33 @@ def main():
         print(r)
 
 
-class DataSet(object):
+def get_datasets(config):
 
-    def __init__(self, data):
-        """Construct a DataSet.
-        """
+    # get data
+    data = get_pickled_data_or_rebuild(config)
+    datasets = build_datasets(data, config)
 
-        self._sentences = data['sentences']
-        self._relations = data['relations']
-        self._lengths = data['lengths']
-        self._num_examples = self._sentences.shape[0]
-        self._epochs_completed = 0
-        self._index_in_epoch = 0
-
-    def next_batch(self, batch_size):
-        """Return the next `batch_size` examples from this data set."""
-
-        start = self._index_in_epoch
-        self._index_in_epoch += batch_size
-
-        if self._index_in_epoch > self._num_examples:
-            # Finished epoch
-            self._epochs_completed += 1
-
-            # Shuffle the data
-            perm = np.arange(self._num_examples)
-            np.random.shuffle(perm)
-            self._sentences = self._sentences[perm]
-            self._relations = self._relations[perm]
-            self._lengths = self._lengths[perm]
-
-            # Start next epoch
-            start = 0
-            self._index_in_epoch = batch_size
-            assert batch_size <= self._num_examples
-
-        end = self._index_in_epoch
-
-        # return batch
-        return self._sentences[start:end], self._relations[start:end], self._lengths[start:end]
-
-    def get_all(self):
-        """Return all examples from this data set."""
-        return self._sentences, self._relations, self._lengths
-
-    @property
-    def sentences(self):
-        return self._sentences
-
-    @property
-    def relations(self):
-        return self._relations
-
-    @property
-    def lengths(self):
-        return self._lengths
-
-    @property
-    def num_examples(self):
-        return self._num_examples
-
-    @property
-    def epochs_completed(self):
-        return self._epochs_completed
+    return datasets
 
 
-def get_data(datafolder='/data/train/', vocab_size=10000, rel_vocab_size=10):
+
+def get_pickled_data_or_rebuild(config=DataConfig()):
+
+    datafolder = config.datafolder
+    vocab_size = config.vocab_size
+    rel_vocab_size = config.rel_vocab_size
+
     # if pickled data already exist then load it
     picklefilepath = datafolder + 'data_%i_%i.pkl' % (vocab_size, rel_vocab_size)
     if os.path.isfile(picklefilepath):
         print('load pre-processed data')
         with open(picklefilepath, 'r') as f:
             data = pickle.load(f)
+
     # otherwise re-process original data and pickle.
     else:
         print('no pre-processed datafiles found: rebuild them')
-        data = build_data(datafolder, vocab_size, rel_vocab_size)
+        data = build_data(config)
 
         print('pickle for reuse later')
         with open(picklefilepath, 'w') as f:
@@ -137,45 +103,65 @@ def get_data(datafolder='/data/train/', vocab_size=10000, rel_vocab_size=10):
     return data
 
 
-def build_data_sets(data, validation_size=5000, test_size=500, train_size=0):
-    class DataSets(object):
-        pass
-    data_sets = DataSets()
+def build_data(config=DataConfig()):
+    srcfile = config.srcfile
+    datafolder = config.datafolder
 
-    relations = data['relations']
-    sentences = data['sentences']
-    lengths = data['lengths']
+    data = read_data_from_source(filename=srcfile)
+    save_data_by_field(data, destfolder=datafolder)
+    build_short_sentences_file(folder=datafolder)
 
-    # slice for training, validation, test datasets
-    num_examples = sentences.shape[0]
-    if not train_size:
-        train_size = num_examples - validation_size - test_size
+    data = read_data_from_individual_files(srcfolder=datafolder)
+    data = filter_data(data)
 
-    data_train, data_rem = split_data(data, train_size)
-    data_val, data_rem = split_data(data_rem, validation_size)
-    data_test, _ = split_data(data_rem, test_size)
+    data = process_data(data, config)
 
-    data_sets.train = DataSet(data_train)
-    data_sets.validation = DataSet(data_val)
-    data_sets.test = DataSet(data_test)
+    return data
 
-    return data_sets
 
-def split_data(data, split_size):
-    """ takes a dict of arrays and splits into two dicts, one of size split_size other of remainder
-    :param data: dict of numpy arrays, all of same length in 1st axis
-    :param split_size: int number of rows to be included in first split
-    :return: data_top [dict of size split_size], data_btm [dict of remainder]
+def read_data_from_source(filename):
+    """ reads in data from specified file, extracts fields and returns as a dict.
+    :param filename: source text file NYT-freebase corpus
+    :return: data dict.
     """
-    data_top = dict()
-    data_btm = dict()
+    # Open file and read in lines
+    with open(filename, 'r') as f:
+        lines = f.readlines()
 
-    for key in data.keys:
-        val_top, val_btm = np.split(data[key], split_size)
-        data_top[key] = val_top
-        data_btm[key] = val_btm
+    # Drop trailing new line indicator '\n'
+    lines = map(lambda x: x[:-3], lines)
 
-    return data_top, data_btm
+    # filter out '#Document' lines
+    lines = filter(lambda x: not x.startswith('#Document'), lines)
+
+    # extract fields
+    data = dict()
+    data['labels'] = map(lambda x: x.split('\t')[0], lines)
+    data['entAs'] = map(lambda x: x.split('\t')[1], lines)
+    data['entBs'] = map(lambda x: x.split('\t')[2], lines)
+    data['relations'] = extract_column_by_prefix(lines, 'REL$')
+    data['sentences'] = extract_column_by_prefix(lines, 'sen#')
+    data['ners'] = extract_column_by_prefix(lines, 'ner#')
+    data['paths'] = extract_column_by_prefix(lines, 'path#')
+    data['pos'] = extract_column_by_prefix(lines, 'pos#')
+    data['lc'] = extract_column_by_prefix(lines, 'lc#')
+    data['rc'] = extract_column_by_prefix(lines, 'rc#')
+    data['lex'] = extract_column_by_prefix(lines, 'lex#')
+    data['trigger'] = extract_column_by_prefix(lines, 'trigger#')
+
+    return data
+
+
+def read_data_from_individual_files(srcfolder):
+
+    data = dict()
+    field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels', 'shortsentences')
+
+    for field in field_list:
+        srcfile = srcfolder + field + '.txt'
+        data[field] = get_list_from_file(srcfile)
+
+    return data
 
 
 def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=True):
@@ -217,128 +203,6 @@ def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=Tru
     data_filtered = data_filtered_df.to_dict(orient='list')
 
     return data_filtered
-
-
-def process_data(data, vocab_size=10000, rel_vocab_size=25):
-
-    sentences = data['sentences']
-    masked_sentences = data['masked_sentences']
-
-    print('build vocab')
-    vocabfilename = 'vocab_%i.txt' % vocab_size
-    vocabfilepath = datafolder + vocabfilename
-    vocab_list = build_vocab_list(masked_sentences, vocab_size)
-    save_vocab_list_to_file(vocab_list, vocabfilepath)
-    vocab, reverse_vocab = build_vocab_and_reverse_vocab(vocab_list)
-
-    print('vectorize masked sentences')
-    vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in masked_sentences]
-
-    print('count sentence lengths')
-    sentence_lengths = [len(sentence) for sentence in vectorized_sentences]
-    sentence_lengths = np.array(sentence_lengths)
-
-    print('pad sentences to common length')
-    for sentence in vectorized_sentences:
-        sentence += [PAD_ID] * (max_sentence_length - len(sentence))
-
-    vectorized_sentences = np.array(vectorized_sentences)
-
-    print('PROCESS RELATIONS')
-    print('make vocab for relations')
-    rel_vocabfilename = 'relations_vocab_%i.txt' % rel_vocab_size
-    rel_vocabfilepath = datafolder + rel_vocabfilename
-    if os.path.isfile(rel_vocabfilepath):
-        print('import relations vocab from file')
-        rel_vocab_list = get_list_from_file(rel_vocabfilepath)
-    else:
-        print('build new relations vocab')
-        rel_counter = Counter(relations)
-        rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
-        rel_vocab_list = rel_vocab_list[:rel_vocab_size]
-        save_vocab_list_to_file(rel_vocab_list, rel_vocabfilepath)
-    rel_vocab, rel_reverse_vocab = build_vocab_and_reverse_vocab(rel_vocab_list)
-
-    print('vectorize relations')
-    vectorized_relations = [rel_vocab.get(relation, UNK_ID) for relation in relations]
-    vectorized_relations = np.array(vectorized_relations)
-
-    # make relations onehot
-    onehot_relations = dense_to_one_hot(vectorized_relations, num_classes=rel_vocab_size)
-
-    data = {'relations': onehot_relations, 'sentences': vectorized_sentences, 'lengths': sentence_lengths}
-
-    return data
-
-
-def read_data_from_individual_files(srcfolder):
-
-    data = dict()
-    field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels', 'shortsentences')
-
-    for field in field_list:
-        srcfile = srcfolder + field + '.txt'
-        data[field] = get_list_from_file(srcfile)
-
-    return data
-
-def read_data_from_source(filename):
-    """ reads in data from specified file, extracts fields and returns as a dict.
-    :param filename: source text file NYT-freebase corpus
-    :return: data dict.
-    """
-    # Open file and read in lines
-    with open(filename, 'r') as f:
-        lines = f.readlines()
-
-    # Drop trailing new line indicator '\n'
-    lines = map(lambda x: x[:-3], lines)
-
-    # filter out '#Document' lines
-    lines = filter(lambda x: not x.startswith('#Document'), lines)
-
-    # extract elements we need
-
-    return data
-
-
-def save_data_by_field(data, destfolder):
-    """
-    create a text file for each list in data dictionary
-    :param data: {fieldname: list}
-    :param destfolder: folder in which datafiles to be saved
-    :return: -
-    """
-
-    # create destination folder if doesn't exist.
-    try:
-        os.makedirs(destfolder)
-    except OSError:
-        if not os.path.isdir(destfolder):
-            raise
-
-    for key in data.keys():
-        destfile = destfolder + key + '.txt'
-        print('save %s as %s' % (key, destfile))
-        save_list_to_file(data[key], destfile)
-
-
-def find_first_str_starting_with_prefix(list_of_strings, prefix):
-    """ return first instance of a string prefixed by prefix from a list of strings, or None.
-    :param list_of_strings: list of strings to search
-    :param prefix: str prefix appearing at start of required string
-    :return: string matching prefix pattern (with prefix removed)
-    """
-    return next((i[len(prefix):] for i in list_of_strings if i.startswith(prefix)), None)
-
-
-def extract_column_by_prefix(list_of_tab_separated_values, prefix):
-    # parse list of strings where each string consists of tab separated values
-    # return a list of values corresponding to values labelled with supplied prefix
-    # does not require values to be in consistent order or to have same entries
-    # returns None for any string where prefix is not found.
-    # returns first instance of prefix only for each string.
-    return map(lambda x: find_first_str_starting_with_prefix(x.split('\t'), prefix), list_of_tab_separated_values)
 
 
 def mask_entities_in_sentences(sentences, entAs, entBs):
@@ -384,12 +248,6 @@ def build_vocab_list(sentences, vocab_size):
     return vocab_list
 
 
-def save_vocab_list_to_file(vocab_list, vocabfilepath):
-    with open(vocabfilepath, 'w') as f:
-        for line in vocab_list:
-            f.write('%s\n' % line)
-
-
 def build_vocab_and_reverse_vocab(vocab_list):
     # expects vocab_list sorted in descending word frequency order (special symbols first)
     # build vocab dict and reverse vocab list
@@ -414,37 +272,6 @@ def vectorize_sentence(sentence, vocab):
 def vectorize_sentences(sentences, vocab):
     vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in sentences]
     return vectorized_sentences
-
-
-def save_list_to_file(list_of_strings, filepath):
-    with open(filepath, 'w') as f:
-        for line in list_of_strings:
-            f.write('%s\n' % line)
-
-
-def get_list_from_file(filepath):
-    with open(filepath, mode="r") as f:
-        list_of_strings = [line.strip() for line in f]
-    return list_of_strings
-
-
-def dense_to_one_hot(dense, num_classes=10):
-    """Convert class labels from scalars to one-hot vectors."""
-    num_examples = len(dense)
-    index_offset = np.arange(num_examples) * num_classes
-    one_hot = np.zeros((num_examples, num_classes), dtype=np.float32)
-    one_hot.flat[index_offset + dense] = 1.
-    return one_hot
-
-
-def split_arrays(arr, train_size, validation_size, test_size):
-    assert validation_size + test_size + train_size <= arr.shape[0]
-
-    arr_val, arr = np.split(arr, [validation_size])
-    arr_test, arr = np.split(arr, [test_size])
-    arr_train, arr = np.split(arr, [train_size])
-
-    return arr_train, arr_val, arr_test
 
 
 def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
@@ -478,23 +305,6 @@ def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
     return embedding
 
 
-def add_parsed_sentences_to_data(data):
-
-    sentences = data['sentences']
-    entAs = data['entAs']
-    entBs = data['entBs']
-
-    # mask entities
-    sentences = mask_entities_in_sentences(sentences, entAs, entBs)
-
-    # stem sentences
-    sentences = stem_sentences(sentences)
-
-    data['parsed_sentences'] = sentences
-
-    return data
-
-
 def stem_sentences(sentences):
     """very basic stemmer; just replace all digits with zeros and make lower case
     """
@@ -506,21 +316,20 @@ def stem_sentences(sentences):
     return sentences
 
 
-def extract_source_data(srcfolder='/data/NYT/nyt-freebase.train.triples.universal.mention.txt',
-                        dstfolder='/data/train/'):
-
-    data = read_data_from_source(srcfolder)
-    save_data_by_field(data, dstfolder)
-
-    print('data from %s saved by field in %s' % (srcfolder, dstfolder))
+def build_short_sentences_file(folder='/data/train/'):
+    # run external scala script to build short sentences file from paths file.
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    scalawd = cwd + '/PathRenderer'
+    subprocess.check_call(['scala', 'PathRenderer', folder], cwd=scalawd)
 
 
-def build_data(srcfolder='/data/train', vocab_size=10000, rel_vocab_size=10,
-               max_sentence_length=104, max_shortsentence_length=25):
+def process_data(data, config):
 
-    data = read_data_from_individual_files('/data/train/')
+    vocab_size = config.vocab_size
+    rel_vocab_size = config.rel_vocab_size
+    max_sentence_length = config.max_sentence_length
+    max_shortsentence_length = config.max_shortsentence_length
 
-    data = filter_data(data)
 
     data['masked_sentences'] = mask_entities_in_sentences(data['sentences'],
                                                           data['entAs'],
@@ -559,24 +368,18 @@ def build_data(srcfolder='/data/train', vocab_size=10000, rel_vocab_size=10,
 
     return data
 
+
+def print_sample_data(data):
+    for key in data.keys():
+        print(key + ' ' + data[key][0].tostr())
+
+
 if __name__ == "__main__":
 
-    data = build_data(srcfolder='/data/train', vocab_size=10000, rel_vocab_size=10)
+    data = read_data_from_individual_files(srcfolder='/data/train/')
+    data = filter_data(data)
 
-    print(data['sentences'][5])
-    print(data['masked_sentences'][5])
-    print(data['stemmed_sentences'][5])
-    print(data['sentence_vecs'][5])
-    print(data['sentence_pad_vecs'][5])
+    data = process_data(data, DataConfig())
 
-    print(data['shortsentences'][5])
-    print(data['stemmed_shortsentences'][5])
-    print(data['shortsentence_vecs'][5])
-    print(data['shortsentence_pad_vecs'][5])
 
-    print(data['relations'][5])
-    print(data['relation_vecs'][5])
-
-    print(data['labels'][5])
-
-    # main()
+    main()
