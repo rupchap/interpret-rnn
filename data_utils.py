@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pandas as pd
 
 
 
@@ -36,12 +37,6 @@ def get_list_from_file(filepath):
     with open(filepath, mode="r") as f:
         list_of_strings = [line.strip() for line in f]
     return list_of_strings
-
-
-def save_vocab_list_to_file(vocab_list, vocabfilepath):
-    with open(vocabfilepath, 'w') as f:
-        for line in vocab_list:
-            f.write('%s\n' % line)
 
 
 def extract_column_by_prefix(list_of_tab_separated_values, prefix):
@@ -102,3 +97,15 @@ def split_data(data, split_size):
         data_btm[key] = val_btm
 
     return data_top, data_btm
+
+
+    # Shuffle the data
+
+def shuffle_data(data, split_size):
+
+    perm = np.arange(self._num_examples)
+    np.random.shuffle(perm)
+
+    self._sentences = self._sentences[perm]
+    self._relations = self._relations[perm]
+    self._lengths = self._lengths[perm]

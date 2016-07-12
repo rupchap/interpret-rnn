@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from load_data import read_data_sets
+from load_data import get_datasets
 from load_data import build_initial_embedding
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import rnn
@@ -29,13 +29,13 @@ class Config(object):
 
     dropout_keep_prob = 1.
 
-    train_size = 0  # 0 to use all remaining data for training.
-    validation_size = 5000
-    test_size = 500
+    train_size = 500  # 0 to use all remaining data for training.
+    validation_size = 500
+    test_size = 0
 
     training_steps = 300000
     batch_size = 100
-    report_step = 1000
+    report_step = 10
     save_step = 10000
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
@@ -75,6 +75,7 @@ def main():
         sess.run(init_op)
 
         # instantiate SummaryWriters to output summaries and the Graph.
+        logfolder = config.logfolder
         writer = tf.train.SummaryWriter(logfolder + 'train/', graph=sess.graph)
         writer_val = tf.train.SummaryWriter(logfolder + 'val/')
 
@@ -85,7 +86,7 @@ def main():
         for step in range(config.training_steps):
 
             # get batch data
-            x_batch, y_batch, lengths_batch = datasets.train.next_batch(config.batch_size)
+            x_batch, lengths_batch, short_batch, short_lengths_batch, y_batch = datasets.train.next_batch(config.batch_size)
             feed_dict = {m.input_data: x_batch,
                          m.targets: y_batch,
                          m.lengths: lengths_batch,
@@ -105,7 +106,7 @@ def main():
                 # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
                 # get statistics on validation data - no dropout
-                x_val, y_val, lengths_val = datasets.validation.get_all()
+                x_val, lengths_val, short_val, short_lengths_val, y_val= datasets.validation.get_all()
                 feed_dict = {m.input_data: x_val,
                              m.targets: y_val,
                              m.lengths: lengths_val,
@@ -133,9 +134,10 @@ def main():
                     print('decayed lr to:', sess.run(m.lr, feed_dict))
                 previous_val_costs.append(cost_val)
 
-            if step % config.save_step == 0:
-                saver.save(sess, save_path=save_path)
-                print('Model saved in: %s' % save_path)
+            # if step % config.save_step == 0:
+            #     save_path = config.save_step
+            #     saver.save(sess, save_path=save_path)
+            #     print('Model saved in: %s' % save_path)
 
     print 'Optimisation complete'
 

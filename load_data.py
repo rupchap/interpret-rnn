@@ -273,7 +273,13 @@ def vectorize_sentences(sentences, vocab):
     return vectorized_sentences
 
 
-def build_initial_embedding(embed_folder, vocab_folder, embed_size, vocab_size):
+def build_initial_embedding(config):
+
+    embed_folder = config.embedfolder
+    vocab_folder = config.datafolder
+    embed_size = config.embed_size
+    vocab_size = config.vocab_size
+
     embedfilepath = embed_folder + 'glove.6B.%id.txt' % embed_size
     vocabfilepath = vocab_folder + 'vocab_%i.txt' % vocab_size
 
@@ -336,11 +342,14 @@ def process_data(data, config):
     data['stemmed_sentences'] = stem_sentences(data['masked_sentences'])
 
     vocab_list = build_vocab_list(data['stemmed_sentences'], vocab_size)
+    vocab_filename = config.datafolder + ('vocab_%i' % vocab_size) + '.txt'
+    save_list_to_file(vocab_list, vocab_filename)
     vocab, rev_vocab = build_vocab_and_reverse_vocab(vocab_list)
 
     data['sentence_vecs'] = vectorize_sentences(data['stemmed_sentences'], vocab)
 
-    data['sentence_lengths'] = [len(sentence) for sentence in data['sentence_vecs']]
+    sentence_lengths = [len(sentence) for sentence in data['sentence_vecs']]
+    data['sentence_lengths'] = np.array(sentence_lengths, dtype=np.int32)
 
     sentence_pad_vecs = [sentence + [PAD_ID] * (max_sentence_length - len(sentence)) for
                          sentence in data['sentence_vecs']]
@@ -350,7 +359,8 @@ def process_data(data, config):
 
     data['shortsentence_vecs'] = vectorize_sentences(data['stemmed_shortsentences'], vocab)
 
-    data['shortsentence_lengths'] = [len(sentence) for sentence in data['shortsentence_vecs']]
+    shortsentence_lengths = [len(sentence) for sentence in data['shortsentence_vecs']]
+    data['shortsentence_lengths'] = np.array(shortsentence_lengths, dtype=np.int32)
 
     shortsentence_pad_vecs = [sentence + [PAD_ID] * (max_shortsentence_length - len(sentence)) for
                               sentence in data['shortsentence_vecs']]
@@ -359,6 +369,9 @@ def process_data(data, config):
     rel_counter = Counter(data['relations'])
     rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
     rel_vocab_list = rel_vocab_list[:rel_vocab_size]
+    rel_vocab_filename = config.datafolder + ('rel_vocab_%i' % vocab_size) + '.txt'
+    save_list_to_file(vocab_list, rel_vocab_filename)
+
     rel_vocab, rel_reverse_vocab = build_vocab_and_reverse_vocab(rel_vocab_list)
 
     relation_vecs = [rel_vocab.get(relation, UNK_ID) for relation in data['relations']]

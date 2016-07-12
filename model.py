@@ -15,8 +15,8 @@ class RNNClassifierModel(object):
 
         # data placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
-        self._y = tf.placeholder(dtype=tf.float32, shape=[None, config.rel_vocab_size], name='labels')
-        # self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
+        # self._y = tf.placeholder(dtype=tf.float32, shape=[None, config.rel_vocab_size], name='labels')
+        self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
         self._lengths = tf.placeholder(dtype=tf.int32, shape=[None], name='lengths')
 
         # dropout placeholder
@@ -60,7 +60,9 @@ class RNNClassifierModel(object):
 
         # Cost
         with tf.name_scope('Cost'):
-            cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
+            # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
+            cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
+
             cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
 
             self._cost = cost
@@ -71,7 +73,9 @@ class RNNClassifierModel(object):
         with tf.name_scope('Accuracy'):
             y_proba = tf.nn.softmax(logits)
             y_pred = tf.arg_max(logits, dimension=1)
-            y_actual = tf.arg_max(self._y, dimension=1)
+            y_pred = tf.cast(y_pred, tf.int32)
+            # y_actual = tf.arg_max(self._y, dimension=1)
+            y_actual = self._y
             correct_prediction = tf.equal(y_pred, y_actual)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
@@ -81,10 +85,12 @@ class RNNClassifierModel(object):
 
             # accuracy per class
             y_pred_onehot = tf.one_hot(y_pred, depth=config.rel_vocab_size, dtype=tf.float32)
-            y_correct_onehot = tf.mul(self._y, y_pred_onehot)
+            # y_actual_onehot = self._y
+            y_actual_onehot = tf.one_hot(self._y, depth=config.rel_vocab_size, dtype=tf.float32)
+            y_correct_onehot = tf.mul(y_actual_onehot, y_pred_onehot)
             accuracy_byclass = tf.reduce_mean(y_correct_onehot, 0)
             pred_byclass = tf.reduce_sum(y_pred_onehot, 0)
-            actual_byclass = tf.reduce_sum(self._y, 0)
+            actual_byclass = tf.reduce_sum(y_actual_onehot, 0)
             self._accuracy_byclass = accuracy_byclass
             self._pred_byclass = pred_byclass
             self._actual_byclass = actual_byclass
