@@ -40,7 +40,7 @@ class DataConfig(object):
     vocab_size = 10000
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     max_sentence_length = 104
-    max_shortsentence_length = 10
+    max_shortsentence_length = 13
     rel_vocab_size = 8
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 5000
@@ -53,14 +53,14 @@ class DataConfig(object):
 def main():
 
     datasets = get_datasets(config=DataConfig())
-    sen, rel = datasets.train.next_batch(5)
+    sen, rel, _ = datasets.train.next_batch(5)
     print('training sample:')
     for s in sen:
         print(s)
     for r in rel:
         print(r)
 
-    sen, rel = datasets.test.next_batch(5)
+    sen, rel, _ = datasets.test.next_batch(5)
     print('training sample:')
     for s in sen:
         print(s)
@@ -75,7 +75,6 @@ def get_datasets(config):
     datasets = build_datasets(data, config)
 
     return datasets
-
 
 
 def get_pickled_data_or_rebuild(config=DataConfig()):
@@ -233,7 +232,7 @@ def build_vocab_list(sentences, vocab_size):
     for sentence in sentences:
         counter += 1
         if counter % 100000 == 0:
-            print("  processing line %d" % counter)
+            print("building vocab - processing line %d" % counter)
         words = basic_tokenizer(sentence)
         for word in words:
             if word in vocab:
@@ -330,7 +329,6 @@ def process_data(data, config):
     max_sentence_length = config.max_sentence_length
     max_shortsentence_length = config.max_shortsentence_length
 
-
     data['masked_sentences'] = mask_entities_in_sentences(data['sentences'],
                                                           data['entAs'],
                                                           data['entBs'])
@@ -375,11 +373,4 @@ def print_sample_data(data):
 
 
 if __name__ == "__main__":
-
-    data = read_data_from_individual_files(srcfolder='/data/train/')
-    data = filter_data(data)
-
-    data = process_data(data, DataConfig())
-
-
     main()

@@ -24,7 +24,7 @@ class Config(object):
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     hidden_size = 150
     max_sentence_length = 104
-    max_shortsentence_length = 10
+    max_shortsentence_length = 13
     rel_vocab_size = 8
 
     dropout_keep_prob = 1.

@@ -92,8 +92,12 @@ def split_data(data, split_size):
     data_top = dict()
     data_btm = dict()
 
-    for key in data.keys:
-        val_top, val_btm = np.split(data[key], split_size)
+    for key in data.keys():
+        if type(data[key]) == np.ndarray:
+            val_top, val_btm = np.split(data[key], [split_size])
+        else:
+            val_top, val_btm = data[key][:split_size], data[key][split_size:]
+
         data_top[key] = val_top
         data_btm[key] = val_btm
 

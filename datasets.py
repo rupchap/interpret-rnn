@@ -8,9 +8,11 @@ class DataSet(object):
         """Construct a DataSet.
         """
 
-        self._sentences = data['sentences']
+        self._sentences = data['sentence_pad_vecs']
+        self._lengths = data['sentence_lengths']
+        self._shortsentences = data['shortsentence_pad_vecs']
+        self._shortlengths = data['shortsentence_lengths']
         self._relations = data['relations']
-        self._lengths = data['lengths']
         self._num_examples = self._sentences.shape[0]
         self._epochs_completed = 0
         self._index_in_epoch = 0
@@ -76,9 +78,8 @@ def build_datasets(data, config):
     test_size = config.test_size
     train_size = config.train_size
 
-
     # slice for training, validation, test datasets
-    num_examples = data['sentences'].shape[0]
+    num_examples = len(data['sentences'])
     if not train_size:
         train_size = num_examples - validation_size - test_size
 
