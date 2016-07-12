@@ -18,7 +18,7 @@ class Config(object):
     learning_rate = 0.1
     lr_decay = 1
     max_grad_norm = 50
-    num_layers = 1
+    num_layers = 2
     keep_prob = 1.0
     vocab_size = 10000
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
@@ -88,8 +88,10 @@ def main():
             # get batch data
             x_batch, lengths_batch, short_batch, short_lengths_batch, y_batch = datasets.train.next_batch(config.batch_size)
             feed_dict = {m.input_data: x_batch,
-                         m.targets: y_batch,
                          m.lengths: lengths_batch,
+                         m.short_input_data: short_batch,
+                         m.short_lengths: short_lengths_batch,
+                         m.targets: y_batch,
                          m.dropout_keep_prob: config.dropout_keep_prob}
 
             # run a training step
@@ -106,10 +108,12 @@ def main():
                 # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
                 # get statistics on validation data - no dropout
-                x_val, lengths_val, short_val, short_lengths_val, y_val= datasets.validation.get_all()
+                x_val, lengths_val, short_val, short_lengths_val, y_val = datasets.validation.get_all()
                 feed_dict = {m.input_data: x_val,
-                             m.targets: y_val,
                              m.lengths: lengths_val,
+                             m.short_input_data: short_val,
+                             m.short_lengths: short_lengths_val,
+                             m.targets: y_val,
                              m.dropout_keep_prob: 1.}
 
                 summaries_val, accuracy_val, cost_val = sess.run([merged, m.accuracy, m.cost],

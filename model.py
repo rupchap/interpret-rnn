@@ -15,9 +15,10 @@ class RNNClassifierModel(object):
 
         # data placeholders
         self._x = tf.placeholder(dtype=tf.int32, shape=[None, config.max_sentence_length], name='data')
-        # self._y = tf.placeholder(dtype=tf.float32, shape=[None, config.rel_vocab_size], name='labels')
-        self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
         self._lengths = tf.placeholder(dtype=tf.int32, shape=[None], name='lengths')
+        self._short = tf.placeholder(dtype=tf.int32, shape=[None, config.max_shortsentence_length], name='shortdata')
+        self._shortlengths = tf.placeholder(dtype=tf.int32, shape=[None], name='shortlengths')
+        self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
 
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
@@ -29,20 +30,21 @@ class RNNClassifierModel(object):
             else:
                 embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
             inputs = tf.nn.embedding_lookup(embedding, self._x)
+            shortinputs = tf.nn.embedding_lookup(embedding, self._short)
 
         lengths = self._lengths
 
         # bi-RNN
         with tf.variable_scope("RNN"):
             # LSTM cell
-            cell_fw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
-            cell_bw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0)
+            cell_fw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
+            cell_bw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
             # Dropout
             cell_fw = rnn_cell.DropoutWrapper(cell_fw, output_keep_prob=self._dropout_keep_prob)
             cell_bw = rnn_cell.DropoutWrapper(cell_bw, output_keep_prob=self._dropout_keep_prob)
             # Multilayer
-            cell_fw = rnn_cell.MultiRNNCell([cell_fw] * config.num_layers)
-            cell_bw = rnn_cell.MultiRNNCell([cell_bw] * config.num_layers)
+            cell_fw = rnn_cell.MultiRNNCell([cell_fw] * config.num_layers, state_is_tuple=True)
+            cell_bw = rnn_cell.MultiRNNCell([cell_bw] * config.num_layers, state_is_tuple=True)
             # RNN
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
 
@@ -50,15 +52,20 @@ class RNNClassifierModel(object):
                                                                                 dtype=tf.float32,
                                                                                 sequence_length=lengths)
 
-            output = tf.concat(1, [output_state_fw, output_state_bw])
+            # TODO - fix so not rely on hardcoded number of  RNN layers
+            state_0 = tf.concat(1, [output_state_fw[0].c, output_state_bw[0].c])
+            output_1 = tf.concat(1, [output_state_fw[1].h, output_state_bw[1].h])
+            output = output_1
 
-        # Linear transform
+        # Linear transform - full RNN to relation
         with tf.name_scope('Logits'):
-            W = tf.get_variable("W", [config.hidden_size*4, config.rel_vocab_size])
+            W = tf.get_variable("W", [config.hidden_size*2, config.rel_vocab_size])
             b = tf.get_variable("b", [config.rel_vocab_size])
             logits = tf.matmul(output, W) + b
 
         # Cost
+        # TODO: add in cost element arising from prediction of short sentence.
+        # TODO: need to add _EOS tag to end of short sentences?
         with tf.name_scope('Cost'):
             # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
             cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
@@ -68,6 +75,25 @@ class RNNClassifierModel(object):
             self._cost = cost
 
             tf.scalar_summary('cost', cost)
+
+            #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
+        with tf.variable_scope("ShortSequenceDecoder"):
+            cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
+            inputs_dc = tf.zeros_like(shortinputs)
+            inputs_dc = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_shortsentence_length, inputs_dc)]
+            outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=inputs_dc,
+                                                             initial_state=output_state_fw[0],
+                                                             cell=cell_dc)
+
+        with tf.variable_scope("ShortSequenceLogits"):
+        # TODO: calc. logits for predicted shortsentence sequence
+
+        with tf.variable_scope('ShortSequenceCost'):
+        # TODO: calc. cost or predicted sequence vs. actual short sentence
+
+        with tf.variable_scope('TotalCost'):
+        # TODO: calc. total cost for subsequent use in training
+        # TODO: how to incorporate dropouts where only either sh. sentence or relation is provided for training?
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
@@ -118,12 +144,20 @@ class RNNClassifierModel(object):
         return self._x
 
     @property
-    def targets(self):
-        return self._y
-
-    @property
     def lengths(self):
         return self._lengths
+
+    @property
+    def short_input_data(self):
+        return self._short
+
+    @property
+    def short_lengths(self):
+        return self._shortlengths
+
+    @property
+    def targets(self):
+        return self._y
 
     @property
     def predictions(self):
