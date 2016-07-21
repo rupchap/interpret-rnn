@@ -39,8 +39,8 @@ _ENTB = '_entb'
 class DataConfig(object):
     vocab_size = 10000
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
-    max_sentence_length = 104
-    max_shortsentence_length = 13
+    max_sentence_length = 105
+    max_shortsentence_length = 14
     rel_vocab_size = 8
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 5000
@@ -53,7 +53,7 @@ class DataConfig(object):
 def main():
 
     datasets = get_datasets(config=DataConfig())
-    sen, rel, _ = datasets.train.next_batch(5)
+    sen, rel = datasets.train.next_batch(5)
     print('training sample:')
     for s in sen:
         print(s)
@@ -351,7 +351,7 @@ def process_data(data, config):
     sentence_lengths = [len(sentence) for sentence in data['sentence_vecs']]
     data['sentence_lengths'] = np.array(sentence_lengths, dtype=np.int32)
 
-    sentence_pad_vecs = [sentence + [PAD_ID] * (max_sentence_length - len(sentence)) for
+    sentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_sentence_length - len(sentence)) for
                          sentence in data['sentence_vecs']]
     data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
 
@@ -362,7 +362,7 @@ def process_data(data, config):
     shortsentence_lengths = [len(sentence) for sentence in data['shortsentence_vecs']]
     data['shortsentence_lengths'] = np.array(shortsentence_lengths, dtype=np.int32)
 
-    shortsentence_pad_vecs = [sentence + [PAD_ID] * (max_shortsentence_length - len(sentence)) for
+    shortsentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_shortsentence_length - len(sentence)) for
                               sentence in data['shortsentence_vecs']]
     data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
 

@@ -23,6 +23,12 @@ class RNNClassifierModel(object):
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
+        # build input for short sentence decoder - just _go symbol [2] followed by _pad [0]
+        batch_size = tf.shape(self._x)[0]
+        pads = tf.zeros([batch_size, config.max_shortsentence_length - 1], dtype=tf.int32)
+        gos = tf.fill([batch_size, 1], 2) #tf.constant(2, dtype=tf.int32))
+        shortinputs = tf.concat(1, [gos, pads])
+
         # embedding
         with tf.device("/cpu:0"), tf.name_scope('Embedding'):
             if init_embedding is not None:
@@ -30,7 +36,8 @@ class RNNClassifierModel(object):
             else:
                 embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
             inputs = tf.nn.embedding_lookup(embedding, self._x)
-            shortinputs = tf.nn.embedding_lookup(embedding, self._short)
+            shortgolds = tf.nn.embedding_lookup(embedding, self._short)
+            shortinputs_embed = tf.nn.embedding_lookup(embedding, shortinputs)
 
         lengths = self._lengths
 
@@ -65,35 +72,32 @@ class RNNClassifierModel(object):
 
         # Cost
         # TODO: add in cost element arising from prediction of short sentence.
-        # TODO: need to add _EOS tag to end of short sentences?
-        with tf.name_scope('Cost'):
-            # cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
+        with tf.name_scope('RelationCost'):
             cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
-
             cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
-
             self._cost = cost
-
             tf.scalar_summary('cost', cost)
 
-            #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
+        #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortSequenceDecoder"):
             cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
-            inputs_dc = tf.zeros_like(shortinputs)
-            inputs_dc = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_shortsentence_length, inputs_dc)]
-            outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=inputs_dc,
+            shortinputs_embed = [tf.squeeze(input_, [1]) for input_ in
+                                 tf.split(1, config.max_shortsentence_length, shortinputs_embed)]
+
+            outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=shortinputs_embed,
                                                              initial_state=output_state_fw[0],
                                                              cell=cell_dc)
+        print('HERE ARE THE DECODER OUTPUTS')
+        print(outputs_dc)
 
-        with tf.variable_scope("ShortSequenceLogits"):
+        # with tf.variable_scope("ShortSequenceLogits"):
         # TODO: calc. logits for predicted shortsentence sequence
 
-        with tf.variable_scope('ShortSequenceCost'):
+        # with tf.variable_scope('ShortSequenceCost'):
         # TODO: calc. cost or predicted sequence vs. actual short sentence
 
-        with tf.variable_scope('TotalCost'):
+        # with tf.variable_scope('TotalCost'):
         # TODO: calc. total cost for subsequent use in training
-        # TODO: how to incorporate dropouts where only either sh. sentence or relation is provided for training?
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
