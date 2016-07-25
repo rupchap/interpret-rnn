@@ -26,7 +26,7 @@ class RNNClassifierModel(object):
         # build input for short sentence decoder - just _go symbol [2] followed by _pad [0]
         batch_size = tf.shape(self._x)[0]
         pads = tf.zeros([batch_size, config.max_shortsentence_length - 1], dtype=tf.int32)
-        gos = tf.fill([batch_size, 1], 2) #tf.constant(2, dtype=tf.int32))
+        gos = tf.fill([batch_size, 1], 2)
         shortinputs = tf.concat(1, [gos, pads])
 
         # embedding
@@ -36,8 +36,12 @@ class RNNClassifierModel(object):
             else:
                 embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
             inputs = tf.nn.embedding_lookup(embedding, self._x)
+
             shortgolds = tf.nn.embedding_lookup(embedding, self._short)
             shortinputs_embed = tf.nn.embedding_lookup(embedding, shortinputs)
+
+            print('embedding:')
+            print(embedding)
 
         lengths = self._lengths
 
@@ -46,15 +50,19 @@ class RNNClassifierModel(object):
             # LSTM cell
             cell_fw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
             cell_bw = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
+
             # Dropout
             cell_fw = rnn_cell.DropoutWrapper(cell_fw, output_keep_prob=self._dropout_keep_prob)
             cell_bw = rnn_cell.DropoutWrapper(cell_bw, output_keep_prob=self._dropout_keep_prob)
+
             # Multilayer
             cell_fw = rnn_cell.MultiRNNCell([cell_fw] * config.num_layers, state_is_tuple=True)
             cell_bw = rnn_cell.MultiRNNCell([cell_bw] * config.num_layers, state_is_tuple=True)
-            # RNN
+
+            # convert inputs tensor to list of 2d tensors [batch_size * embed_size] of length max_sentence_length
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
 
+            # RNN
             outputs, output_state_fw, output_state_bw = tf.nn.bidirectional_rnn(cell_fw, cell_bw, inputs,
                                                                                 dtype=tf.float32,
                                                                                 sequence_length=lengths)
@@ -64,19 +72,18 @@ class RNNClassifierModel(object):
             output_1 = tf.concat(1, [output_state_fw[1].h, output_state_bw[1].h])
             output = output_1
 
-        # Linear transform - full RNN to relation
+        # Linear transform - final RNN state to relation
         with tf.name_scope('Logits'):
             W = tf.get_variable("W", [config.hidden_size*2, config.rel_vocab_size])
             b = tf.get_variable("b", [config.rel_vocab_size])
             logits = tf.matmul(output, W) + b
 
-        # Cost
-        # TODO: add in cost element arising from prediction of short sentence.
+        # RelationCost
         with tf.name_scope('RelationCost'):
             cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
-            cost = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
-            self._cost = cost
-            tf.scalar_summary('cost', cost)
+            cost_relation = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
+            self._cost_relation = cost_relation
+            tf.scalar_summary('cost_relation', cost_relation)
 
         #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortSequenceDecoder"):
@@ -87,17 +94,27 @@ class RNNClassifierModel(object):
             outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=shortinputs_embed,
                                                              initial_state=output_state_fw[0],
                                                              cell=cell_dc)
-        print('HERE ARE THE DECODER OUTPUTS')
-        print(outputs_dc)
 
-        # with tf.variable_scope("ShortSequenceLogits"):
-        # TODO: calc. logits for predicted shortsentence sequence
+        # TODO: can we use the embedding matrix here somehow?
+        with tf.variable_scope("ShortSequenceLogits"):
+            W_short = tf.get_variable("W_short", [config.hidden_size, config.vocab_size])
+            b_short = tf.get_variable("b_short", [config.vocab_size])
+            logits_short = [tf.matmul(output, W_short) + b_short for output in outputs_dc]
 
-        # with tf.variable_scope('ShortSequenceCost'):
-        # TODO: calc. cost or predicted sequence vs. actual short sentence
+        with tf.variable_scope('ShortSequenceCost'):
+            targets = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_shortsentence_length, self._short)]
+            # TODO: how should weights be used here?
+            weights = [tf.ones_like(_targets, dtype=tf.float32) for _targets in targets]
 
-        # with tf.variable_scope('TotalCost'):
-        # TODO: calc. total cost for subsequent use in training
+            cost_short = tf.nn.seq2seq.sequence_loss(logits=logits_short,
+                                                     targets=targets,
+                                                     weights=weights)
+            self._cost_short = cost_short
+            tf.scalar_summary('cost_short', cost_short)
+
+        with tf.variable_scope('TotalCost'):
+            cost = cost_relation + cost_short
+            self._cost = cost
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
