@@ -20,22 +20,24 @@ class Config(object):
     max_grad_norm = 50
     num_layers = 2
     keep_prob = 1.0
-    vocab_size = 10000
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     hidden_size = 150
+
     max_sentence_length = 106
     max_shortsentence_length = 15
+
+    vocab_size = 10000
     rel_vocab_size = 8
 
     dropout_keep_prob = 1.
 
-    train_size = 500  # 0 to use all remaining data for training.
-    validation_size = 500
+    train_size = 0  # 0 to use all remaining data for training.
+    validation_size = 1000
     test_size = 0
 
     training_steps = 300000
     batch_size = 100
-    report_step = 10
+    report_step = 500
     save_step = 10000
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
@@ -147,4 +149,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # m = RNNClassifierModel(config=Config())
+    #
     main()

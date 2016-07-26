@@ -348,10 +348,12 @@ def process_data(data, config):
 
     data['sentence_vecs'] = vectorize_sentences(data['stemmed_sentences'], vocab)
 
-    sentence_lengths = [len(sentence) for sentence in data['sentence_vecs']]
+    # get sentence lengths [+1 for EOS symbol]
+    sentence_lengths = [len(sentence) + 1 for sentence in data['sentence_vecs']]
     data['sentence_lengths'] = np.array(sentence_lengths, dtype=np.int32)
 
-    sentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_sentence_length - len(sentence)) for
+    # pad to max sentence length [including EOS]
+    sentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_sentence_length - len(sentence) - 1) for
                          sentence in data['sentence_vecs']]
     data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
 
@@ -359,10 +361,12 @@ def process_data(data, config):
 
     data['shortsentence_vecs'] = vectorize_sentences(data['stemmed_shortsentences'], vocab)
 
-    shortsentence_lengths = [len(sentence) for sentence in data['shortsentence_vecs']]
+    # get short sentence lengths [+1 for EOS symbol]
+    shortsentence_lengths = [len(sentence) + 1 for sentence in data['shortsentence_vecs']]
     data['shortsentence_lengths'] = np.array(shortsentence_lengths, dtype=np.int32)
 
-    shortsentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_shortsentence_length - len(sentence)) for
+    # pad to max short sentence length [including EOS]
+    shortsentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_shortsentence_length - len(sentence) - 1) for
                               sentence in data['shortsentence_vecs']]
     data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
 

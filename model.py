@@ -40,9 +40,6 @@ class RNNClassifierModel(object):
             shortgolds = tf.nn.embedding_lookup(embedding, self._short)
             shortinputs_embed = tf.nn.embedding_lookup(embedding, shortinputs)
 
-            print('embedding:')
-            print(embedding)
-
         lengths = self._lengths
 
         # bi-RNN
@@ -67,24 +64,30 @@ class RNNClassifierModel(object):
                                                                                 dtype=tf.float32,
                                                                                 sequence_length=lengths)
 
+            # concatenate fw and bw output states
+            output_state_comb = [tf.concat(1, [output_state_fw[i], output_state_bw[i]])
+                                 for i in range(len(output_state_fw))]
+
             # TODO - fix so not rely on hardcoded number of  RNN layers
             state_0 = tf.concat(1, [output_state_fw[0].c, output_state_bw[0].c])
             output_1 = tf.concat(1, [output_state_fw[1].h, output_state_bw[1].h])
             output = output_1
 
+        # DECODE RELATION
         # Linear transform - final RNN state to relation
         with tf.name_scope('Logits'):
-            W = tf.get_variable("W", [config.hidden_size*2, config.rel_vocab_size])
-            b = tf.get_variable("b", [config.rel_vocab_size])
-            logits = tf.matmul(output, W) + b
+            W_rel = tf.get_variable("W_rel", [config.hidden_size*2, config.rel_vocab_size])
+            b_rel = tf.get_variable("b_rel", [config.rel_vocab_size])
+            logits_rel = tf.matmul(output_1, W_rel) + b_rel
 
         # RelationCost
         with tf.name_scope('RelationCost'):
-            cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self._y, name='cross_entropy')
+            cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits_rel, self._y, name='cross_entropy')
             cost_relation = tf.reduce_mean(cross_entropy_loss, name='cross_entropy_mean')
             self._cost_relation = cost_relation
             tf.scalar_summary('cost_relation', cost_relation)
 
+        # DECODE SHORT SENTENCE
         #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortSequenceDecoder"):
             cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
@@ -103,7 +106,7 @@ class RNNClassifierModel(object):
 
         with tf.variable_scope('ShortSequenceCost'):
             targets = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_shortsentence_length, self._short)]
-            # TODO: how should weights be used here?
+            # TODO: how should weights be used here?  Should be 1 for valid (incl EOS) 0 for Pad
             weights = [tf.ones_like(_targets, dtype=tf.float32) for _targets in targets]
 
             cost_short = tf.nn.seq2seq.sequence_loss(logits=logits_short,
@@ -118,8 +121,8 @@ class RNNClassifierModel(object):
 
         # Predict and assess accuracy
         with tf.name_scope('Accuracy'):
-            y_proba = tf.nn.softmax(logits)
-            y_pred = tf.arg_max(logits, dimension=1)
+            y_proba = tf.nn.softmax(logits_rel)
+            y_pred = tf.arg_max(logits_rel, dimension=1)
             y_pred = tf.cast(y_pred, tf.int32)
             # y_actual = tf.arg_max(self._y, dimension=1)
             y_actual = self._y
