@@ -1,5 +1,4 @@
 import numpy as np
-from load_data import *
 
 
 class DataSet(object):
@@ -96,3 +95,24 @@ def build_datasets(data, config):
     datasets.test = DataSet(data_test)
 
     return datasets
+
+
+def split_data(data, split_size):
+    """ takes a dict of arrays and splits into two dicts, one of size split_size other of remainder
+    :param data: dict of numpy arrays AND/OR lists, all of same length in 1st axis
+    :param split_size: int number of rows to be included in first split
+    :return: data_top [dict of size split_size], data_btm [dict of remainder]
+    """
+    data_top = dict()
+    data_btm = dict()
+
+    for key in data.keys():
+        if type(data[key]) == np.ndarray:
+            val_top, val_btm = np.split(data[key], [split_size])
+        else:
+            val_top, val_btm = data[key][:split_size], data[key][split_size:]
+
+        data_top[key] = val_top
+        data_btm[key] = val_btm
+
+    return data_top, data_btm

@@ -10,10 +10,10 @@ import pandas as pd
 import csv
 import cPickle as pickle
 import subprocess
-from collections import Counter, defaultdict
+from collections import Counter
 
-from data_utils import *
-from datasets import *
+from datasets import build_datasets
+
 
 # regex for digits
 _DIGIT_RE = re.compile(r"\d")
@@ -39,8 +39,8 @@ _ENTB = '_entb'
 class DataConfig(object):
     vocab_size = 10000
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
-    max_sentence_length = 105
-    max_shortsentence_length = 14
+    max_sentence_length = 106
+    max_shortsentence_length = 15
     rel_vocab_size = 8
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 5000
@@ -53,19 +53,9 @@ class DataConfig(object):
 def main():
 
     datasets = get_datasets(config=DataConfig())
-    sen, rel = datasets.train.next_batch(5)
+    data_train = datasets.train.next_batch(5)
     print('training sample:')
-    for s in sen:
-        print(s)
-    for r in rel:
-        print(r)
-
-    sen, rel, _ = datasets.test.next_batch(5)
-    print('training sample:')
-    for s in sen:
-        print(s)
-    for r in rel:
-        print(r)
+    print(data_train)
 
 
 def get_datasets(config):
@@ -79,12 +69,8 @@ def get_datasets(config):
 
 def get_pickled_data_or_rebuild(config=DataConfig()):
 
-    datafolder = config.datafolder
-    vocab_size = config.vocab_size
-    rel_vocab_size = config.rel_vocab_size
-
     # if pickled data already exist then load it
-    picklefilepath = datafolder + 'data_%i_%i.pkl' % (vocab_size, rel_vocab_size)
+    picklefilepath = config.datafolder + 'data_%i_%i.pkl' % (config.vocab_size, config.rel_vocab_size)
     if os.path.isfile(picklefilepath):
         print('load pre-processed data')
         with open(picklefilepath, 'r') as f:
@@ -103,14 +89,14 @@ def get_pickled_data_or_rebuild(config=DataConfig()):
 
 
 def build_data(config=DataConfig()):
-    srcfile = config.srcfile
-    datafolder = config.datafolder
 
-    data = read_data_from_source(filename=srcfile)
-    save_data_by_field(data, destfolder=datafolder)
-    build_short_sentences_file(folder=datafolder)
+    # import data from source
+    data = read_data_from_source(filename=config.srcfile)
 
-    data = read_data_from_individual_files(srcfolder=datafolder)
+    save_data_by_field_to_individual_files(data, folder=config.datafolder)
+    build_short_sentences_file(folder=config.datafolder)  # run scala script
+    data = read_data_from_individual_files(folder=config.datafolder)
+
     data = filter_data(data)
 
     data = process_data(data, config)
@@ -151,28 +137,60 @@ def read_data_from_source(filename):
     return data
 
 
-def read_data_from_individual_files(srcfolder):
+def save_data_by_field_to_individual_files(data, folder):
+    """
+    create a text file for each list in data dictionary
+    :param data: {fieldname: list}
+    :param folder: folder in which datafiles to be saved
+    :return: -
+    """
+
+    # create destination folder if doesn't exist.
+    try:
+        os.makedirs(folder)
+    except OSError:
+        if not os.path.isdir(folder):
+            raise
+
+    # save each list in dict as a separate file
+    for key in data.keys():
+        filepath = folder + key + '.txt'
+        print('save %s as %s' % (key, filepath))
+        save_list_to_file(data[key], filepath)
+
+
+def build_short_sentences_file(folder='/data/train/'):
+    # run external scala script to build short sentences file from paths file.
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    scalawd = cwd + '/PathRenderer'
+    subprocess.check_call(['scala', 'PathRenderer', folder], cwd=scalawd)
+    print('save shortsentences as %s/shortsentences.txt' % folder)
+
+
+def read_data_from_individual_files(folder):
 
     data = dict()
     field_list = ('sentences', 'entAs', 'entBs', 'relations', 'labels', 'shortsentences')
 
     for field in field_list:
-        srcfile = srcfolder + field + '.txt'
-        data[field] = get_list_from_file(srcfile)
+        filepath = folder + field + '.txt'
+        data[field] = get_list_from_file(filepath)
 
     return data
 
 
 def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=True):
 
+    # use pandas
     data_df = pd.DataFrame(data)
 
+    # count occurrences of 'POSITIVE', 'NEGATIVE' and 'UNLABELED' records in original data
     counts_by_label = data_df.groupby(['labels']).size()
     print('Original data:')
     print(counts_by_label)
     pos_count, neg_count, unl_count = counts_by_label[['POSITIVE', 'NEGATIVE', 'UNLABELED']]
 
-    # Filter dataset to required number of cases of different label types
+    # Filter data to required number of cases of different label types
     pos_req = pos_count
     if keep_negative:
         if equal_posneg:
@@ -195,27 +213,117 @@ def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=Tru
     # shuffle rows
     data_filtered_df = data_filtered_df.sample(frac=1)
 
+    # count occurrences of 'POSITIVE', 'NEGATIVE' and 'UNLABELED' records in filtered data
     counts_by_label = data_filtered_df.groupby(['labels']).size()
     print('Filtered data:')
     print(counts_by_label)
 
+    # return data as dict
     data_filtered = data_filtered_df.to_dict(orient='list')
 
     return data_filtered
 
 
+def process_data(data, config):
+    
+    data['masked_sentences'] = mask_entities_in_sentences(data['sentences'], data['entAs'], data['entBs'])
+
+    data['stemmed_sentences'] = stem_sentences(data['masked_sentences'])
+
+    vocab, rev_vocab = build_vocab(data['stemmed_sentences'], config.vocab_size)
+
+    vocab_filename = config.datafolder + ('vocab_%i' % config.vocab_size) + '.txt'
+    save_list_to_file(rev_vocab, vocab_filename)
+
+    data['sentence_vecs'] = [vectorize_sentence(sentence, vocab, addGo=False, addEOS=True)
+                             for sentence in data['stemmed_sentences']]
+
+    # get sentence lengths - as np.array
+    sentence_lengths = [len(sentence) for sentence in data['sentence_vecs']]
+    data['sentence_lengths'] = np.array(sentence_lengths, dtype=np.int32)
+
+    # pad to max sentence length - as np.array
+    sentence_pad_vecs = [sentence + [PAD_ID] * (config.max_sentence_length - len(sentence)) for
+                         sentence in data['sentence_vecs']]
+    data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
+
+    data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
+
+    # vectorise short sentences - use same vocab as for long sentences
+    data['shortsentence_vecs'] = [vectorize_sentence(sentence, vocab, addGo=True, addEOS=True)
+                                  for sentence in data['stemmed_shortsentences']]
+
+    # get short sentence lengths - as np.array
+    shortsentence_lengths = [len(sentence) for sentence in data['shortsentence_vecs']]
+    data['shortsentence_lengths'] = np.array(shortsentence_lengths, dtype=np.int32)
+
+    # pad to max short sentence length - as np.array
+    shortsentence_pad_vecs = [sentence + [PAD_ID] * (config.max_shortsentence_length - len(sentence)) for
+                              sentence in data['shortsentence_vecs']]
+    data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
+
+    # Create shortsentence_weights to be 1.0 for all tokens, except 0.0 for padding.
+    shortsentence_weights = np.ones_like(shortsentence_pad_vecs, dtype=np.float32)
+    shortsentence_weights = shortsentence_weights[shortsentence_pad_vecs == PAD_ID] - 1.
+    data['shortsentence_weights'] = shortsentence_weights
+
+    # todo: refactor to use same vocab function as for sentences
+    rel_counter = Counter(data['relations'])
+    rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
+    rel_vocab_list = rel_vocab_list[:config.rel_vocab_size]
+    rel_vocab_filename = config.datafolder + ('rel_vocab_%i' % config.rel_vocab_size) + '.txt'
+    save_list_to_file(rel_vocab_list, rel_vocab_filename)
+
+    rel_vocab = dict([(x, y) for (y, x) in enumerate(rel_vocab_list)])
+
+    relation_vecs = [rel_vocab.get(relation, UNK_ID) for relation in data['relations']]
+    data['relation_vecs'] = np.array(relation_vecs, np.int32)
+
+    return data
+
+
 def mask_entities_in_sentences(sentences, entAs, entBs):
 
-    masked_sentences = [sentence.replace(entA, '_ENTA').replace(entB, '_ENTB')
+    masked_sentences = [sentence.replace(entA, _ENTA).replace(entB, _ENTB)
                         for sentence, entA, entB in zip(sentences, entAs, entBs)]
 
     return masked_sentences
 
 
-def shorten_sentence(sen, entA, entB):
-    start = sen.find(entA) + len(entA) + 1
-    end = sen.find(entB) - 1
-    return sen[start:end]
+def stem_sentences(sentences):
+    """very basic stemmer; just replace all digits with zeros and make lower case
+    """
+    # swap digits for 0
+    sentences = [re.sub(_DIGIT_RE, "0", sentence) for sentence in sentences]
+    # make lower case
+    sentences = [sentence.lower() for sentence in sentences]
+
+    return sentences
+
+
+def build_vocab(sentences, vocab_size):
+    vocab_counter = {}
+    counter = 0
+    for sentence in sentences:
+        counter += 1
+        if counter % 50000 == 0:
+            print("building vocab - processing line %d" % counter)
+        words = basic_tokenizer(sentence)
+        for word in words:
+            if word in vocab_counter:
+                vocab_counter[word] += 1
+            else:
+                vocab_counter[word] = 1
+    reverse_vocab = _START_VOCAB + sorted(vocab_counter, key=vocab_counter.get, reverse=True)
+
+    # crop to vocab_size
+    if len(reverse_vocab) > vocab_size:
+        reverse_vocab = reverse_vocab[:vocab_size]
+
+    # build vocab dict
+    vocab = dict([(x, y) for (y, x) in enumerate(reverse_vocab)])
+
+    return vocab, reverse_vocab
 
 
 def basic_tokenizer(sentence):
@@ -223,54 +331,32 @@ def basic_tokenizer(sentence):
     words = []
     for space_separated_fragment in sentence.strip().split():
         words.extend(re.split(_WORD_SPLIT, space_separated_fragment))
-    return [w for w in words if w]
+    return [word for word in words if word]
 
 
-def build_vocab_list(sentences, vocab_size):
-    vocab = {}
-    counter = 0
-    for sentence in sentences:
-        counter += 1
-        if counter % 100000 == 0:
-            print("building vocab - processing line %d" % counter)
-        words = basic_tokenizer(sentence)
-        for word in words:
-            if word in vocab:
-                vocab[word] += 1
-            else:
-                vocab[word] = 1
-    vocab_list = _START_VOCAB + sorted(vocab, key=vocab.get, reverse=True)
+def vectorize_sentence(sentence, vocab, addGo=False, addEOS=True):
 
-    # crop to vocab_size
-    if len(vocab_list) > vocab_size:
-        vocab_list = vocab_list[:vocab_size]
-    return vocab_list
-
-
-def build_vocab_and_reverse_vocab(vocab_list):
-    # expects vocab_list sorted in descending word frequency order (special symbols first)
-    # build vocab dict and reverse vocab list
-    reverse_vocab = vocab_list
-    vocab = dict([(x, y) for (y, x) in enumerate(reverse_vocab)])
-    return vocab, reverse_vocab
-
-
-def vectorize_sentence(sentence, vocab):
-    words = basic_tokenizer(sentence)
     vectorized_sentence = []
 
-    for w in words:
-        # swap digits for 0
-        word = re.sub(_DIGIT_RE, "0", w)
+    words = basic_tokenizer(sentence)
+
+    if addGo:
+        vectorized_sentence.append(GO_ID)
+
+    for word in words:
         word_ID = vocab.get(word, UNK_ID)
         vectorized_sentence.append(word_ID)
+
+    if addEOS:
+        vectorized_sentence.append(EOS_ID)
 
     return vectorized_sentence
 
 
-def vectorize_sentences(sentences, vocab):
-    vectorized_sentences = [vectorize_sentence(sentence, vocab) for sentence in sentences]
-    return vectorized_sentences
+def shorten_sentence(sen, entA, entB):
+    start = sen.find(entA) + len(entA) + 1
+    end = sen.find(entB) - 1
+    return sen[start:end]
 
 
 def build_initial_embedding(config):
@@ -310,83 +396,58 @@ def build_initial_embedding(config):
     return embedding
 
 
-def stem_sentences(sentences):
-    """very basic stemmer; just replace all digits with zeros and make lower case
-    """
-    # swap digits for 0
-    sentences = [re.sub(_DIGIT_RE, "0", sentence) for sentence in sentences]
-    # make lower case
-    sentences = [sentence.lower() for sentence in sentences]
-
-    return sentences
-
-
-def build_short_sentences_file(folder='/data/train/'):
-    # run external scala script to build short sentences file from paths file.
-    cwd = os.path.dirname(os.path.realpath(__file__))
-    scalawd = cwd + '/PathRenderer'
-    subprocess.check_call(['scala', 'PathRenderer', folder], cwd=scalawd)
-
-
-def process_data(data, config):
-
-    vocab_size = config.vocab_size
-    rel_vocab_size = config.rel_vocab_size
-    max_sentence_length = config.max_sentence_length
-    max_shortsentence_length = config.max_shortsentence_length
-
-    data['masked_sentences'] = mask_entities_in_sentences(data['sentences'],
-                                                          data['entAs'],
-                                                          data['entBs'])
-
-    data['stemmed_sentences'] = stem_sentences(data['masked_sentences'])
-
-    vocab_list = build_vocab_list(data['stemmed_sentences'], vocab_size)
-    vocab_filename = config.datafolder + ('vocab_%i' % vocab_size) + '.txt'
-    save_list_to_file(vocab_list, vocab_filename)
-    vocab, rev_vocab = build_vocab_and_reverse_vocab(vocab_list)
-
-    data['sentence_vecs'] = vectorize_sentences(data['stemmed_sentences'], vocab)
-
-    # get sentence lengths [+1 for EOS symbol]
-    sentence_lengths = [len(sentence) + 1 for sentence in data['sentence_vecs']]
-    data['sentence_lengths'] = np.array(sentence_lengths, dtype=np.int32)
-
-    # pad to max sentence length [including EOS]
-    sentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_sentence_length - len(sentence) - 1) for
-                         sentence in data['sentence_vecs']]
-    data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
-
-    data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
-
-    data['shortsentence_vecs'] = vectorize_sentences(data['stemmed_shortsentences'], vocab)
-
-    # get short sentence lengths [+1 for EOS symbol]
-    shortsentence_lengths = [len(sentence) + 1 for sentence in data['shortsentence_vecs']]
-    data['shortsentence_lengths'] = np.array(shortsentence_lengths, dtype=np.int32)
-
-    # pad to max short sentence length [including EOS]
-    shortsentence_pad_vecs = [sentence + [EOS_ID] + [PAD_ID] * (max_shortsentence_length - len(sentence) - 1) for
-                              sentence in data['shortsentence_vecs']]
-    data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
-
-    rel_counter = Counter(data['relations'])
-    rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
-    rel_vocab_list = rel_vocab_list[:rel_vocab_size]
-    rel_vocab_filename = config.datafolder + ('rel_vocab_%i' % vocab_size) + '.txt'
-    save_list_to_file(vocab_list, rel_vocab_filename)
-
-    rel_vocab, rel_reverse_vocab = build_vocab_and_reverse_vocab(rel_vocab_list)
-
-    relation_vecs = [rel_vocab.get(relation, UNK_ID) for relation in data['relations']]
-    data['relation_vecs'] = np.array(relation_vecs, np.int32)
-
-    return data
-
-
 def print_sample_data(data):
     for key in data.keys():
         print(key + ' ' + data[key][0].tostr())
+
+
+def split_arrays(arr, train_size, validation_size, test_size):
+    assert validation_size + test_size + train_size <= arr.shape[0]
+
+    arr_val, arr = np.split(arr, [validation_size])
+    arr_test, arr = np.split(arr, [test_size])
+    arr_train, arr = np.split(arr, [train_size])
+
+    return arr_train, arr_val, arr_test
+
+
+def dense_to_one_hot(dense, num_classes=10):
+    """Convert class labels from scalars to one-hot vectors."""
+    num_examples = len(dense)
+    index_offset = np.arange(num_examples) * num_classes
+    one_hot = np.zeros((num_examples, num_classes), dtype=np.float32)
+    one_hot.flat[index_offset + dense] = 1.
+    return one_hot
+
+
+def get_list_from_file(filepath):
+    with open(filepath, mode="r") as f:
+        list_of_strings = [line.strip() for line in f]
+    return list_of_strings
+
+
+def extract_column_by_prefix(list_of_tab_separated_values, prefix):
+    # parse list of strings where each string consists of tab separated values
+    # return a list of values corresponding to values labelled with supplied prefix
+    # does not require values to be in consistent order or to have same entries
+    # returns None for any string where prefix is not found.
+    # returns first instance of prefix only for each string.
+    return map(lambda x: find_first_str_starting_with_prefix(x.split('\t'), prefix), list_of_tab_separated_values)
+
+
+def find_first_str_starting_with_prefix(list_of_strings, prefix):
+    """ return first instance of a string prefixed by prefix from a list of strings, or None.
+    :param list_of_strings: list of strings to search
+    :param prefix: str prefix appearing at start of required string
+    :return: string matching prefix pattern (with prefix removed)
+    """
+    return next((i[len(prefix):] for i in list_of_strings if i.startswith(prefix)), None)
+
+
+def save_list_to_file(list_of_strings, filepath):
+    with open(filepath, 'w') as f:
+        for string in list_of_strings:
+            f.write('%s\n' % string)
 
 
 if __name__ == "__main__":
