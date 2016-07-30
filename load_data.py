@@ -247,6 +247,12 @@ def process_data(data, config):
                          sentence in data['sentence_vecs']]
     data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
 
+    # Create shortsentence_weights to be 1.0 for all tokens, except 0.0 for padding.
+    sentence_weights = np.ones_like(shortsentence_pad_vecs, dtype=np.float32)
+    sentence_weights = shortsentence_weights[shortsentence_pad_vecs == PAD_ID] - 1.
+    data['shortsentence_weights'] = shortsentence_weights
+
+
     data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
 
     # vectorise short sentences - use same vocab as for long sentences
