@@ -88,7 +88,7 @@ class RNNClassifierModel(object):
             tf.scalar_summary('cost_relation', cost_relation)
 
         # DECODE SHORT SENTENCE
-        #  TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
+        # TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortSequenceDecoder"):
             cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size, forget_bias=1.0, state_is_tuple=True)
             shortinputs_embed = [tf.squeeze(input_, [1]) for input_ in
