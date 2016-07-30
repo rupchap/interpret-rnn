@@ -11,6 +11,7 @@ class DataSet(object):
         self._lengths = data['sentence_lengths']
         self._shortsentences = data['shortsentence_pad_vecs']
         self._shortlengths = data['shortsentence_lengths']
+        self._shortweights = data['shortsentence_weights']
         self._relations = data['relation_vecs']
         self._num_examples = self._sentences.shape[0]
         self._epochs_completed = 0
@@ -34,6 +35,7 @@ class DataSet(object):
             self._lengths = self._lengths[perm]
             self._shortsentences = self._shortsentences[perm]
             self._shortlengths = self._shortlengths[perm]
+            self._shortweights = self._shortweights[perm]
 
             # Start next epoch
             start = 0
@@ -44,12 +46,14 @@ class DataSet(object):
 
         # return batch
         return self._sentences[start:end], self._lengths[start:end],\
-               self._shortsentences[start:end], self._shortlengths[start:end],\
+               self._shortsentences[start:end], self._shortlengths[start:end], self._shortweights[start:end],\
                self._relations[start:end]
 
     def get_all(self):
         """Return all examples from this data set."""
-        return self._sentences, self._lengths, self._shortsentences, self._shortlengths, self._relations
+        return self._sentences, self._lengths,\
+               self._shortsentences, self._shortlengths, self._shortweights,\
+               self._relations
 
     @property
     def sentences(self):

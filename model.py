@@ -18,6 +18,7 @@ class RNNClassifierModel(object):
         self._lengths = tf.placeholder(dtype=tf.int32, shape=[None], name='lengths')
         self._short = tf.placeholder(dtype=tf.int32, shape=[None, config.max_shortsentence_length], name='shortdata')
         self._shortlengths = tf.placeholder(dtype=tf.int32, shape=[None], name='shortlengths')
+        self._shortweights = tf.placeholder(dtype=tf.float32, shape=[None, config.max_shortsentence_length], name='shortweights')
         self._y = tf.placeholder(dtype=tf.int32, shape=[None], name='labels')
 
         # dropout placeholder
@@ -106,8 +107,7 @@ class RNNClassifierModel(object):
 
         with tf.variable_scope('ShortSequenceCost'):
             targets = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_shortsentence_length, self._short)]
-            # TODO: how should weights be used here?  Should be 1 for valid (incl EOS) 0 for Pad
-            weights = [tf.ones_like(_targets, dtype=tf.float32) for _targets in targets]
+            weights = [tf.squeeze(weight_, [1]) for weight_ in tf.split(1, config.max_shortsentence_length, self._shortweights)]
 
             cost_short = tf.nn.seq2seq.sequence_loss(logits=logits_short,
                                                      targets=targets,
@@ -178,6 +178,10 @@ class RNNClassifierModel(object):
     @property
     def short_lengths(self):
         return self._shortlengths
+
+    @property
+    def short_weights(self):
+        return self._shortweights
 
     @property
     def targets(self):

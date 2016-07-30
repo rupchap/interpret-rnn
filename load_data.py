@@ -248,10 +248,10 @@ def process_data(data, config):
     data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
 
     # Create shortsentence_weights to be 1.0 for all tokens, except 0.0 for padding.
-    sentence_weights = np.ones_like(shortsentence_pad_vecs, dtype=np.float32)
-    sentence_weights = shortsentence_weights[shortsentence_pad_vecs == PAD_ID] - 1.
-    data['shortsentence_weights'] = shortsentence_weights
 
+    sentence_weights = np.ones_like(data['sentence_pad_vecs'], dtype=np.float32)
+    sentence_weights[data['sentence_pad_vecs'] == PAD_ID] = 0.
+    data['sentence_weights'] = sentence_weights
 
     data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
 
@@ -269,8 +269,8 @@ def process_data(data, config):
     data['shortsentence_pad_vecs'] = np.array(shortsentence_pad_vecs, np.int32)
 
     # Create shortsentence_weights to be 1.0 for all tokens, except 0.0 for padding.
-    shortsentence_weights = np.ones_like(shortsentence_pad_vecs, dtype=np.float32)
-    shortsentence_weights = shortsentence_weights[shortsentence_pad_vecs == PAD_ID] - 1.
+    shortsentence_weights = np.ones_like(data['shortsentence_pad_vecs'], dtype=np.float32)
+    shortsentence_weights[data['shortsentence_pad_vecs'] == PAD_ID] = 0.
     data['shortsentence_weights'] = shortsentence_weights
 
     # todo: refactor to use same vocab function as for sentences

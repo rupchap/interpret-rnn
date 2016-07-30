@@ -88,11 +88,13 @@ def main():
         for step in range(config.training_steps):
 
             # get batch data
-            x_batch, lengths_batch, short_batch, short_lengths_batch, y_batch = datasets.train.next_batch(config.batch_size)
+            x_batch, lengths_batch, short_batch, short_lengths_batch, short_weights_batch, y_batch =\
+                datasets.train.next_batch(config.batch_size)
             feed_dict = {m.input_data: x_batch,
                          m.lengths: lengths_batch,
                          m.short_input_data: short_batch,
                          m.short_lengths: short_lengths_batch,
+                         m.short_weights: short_weights_batch,
                          m.targets: y_batch,
                          m.dropout_keep_prob: config.dropout_keep_prob}
 
@@ -110,11 +112,13 @@ def main():
                 # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
 
                 # get statistics on validation data - no dropout
-                x_val, lengths_val, short_val, short_lengths_val, y_val = datasets.validation.get_all()
+                x_val, lengths_val, short_val, short_lengths_val, short_weights_val, y_val =\
+                    datasets.validation.get_all()
                 feed_dict = {m.input_data: x_val,
                              m.lengths: lengths_val,
                              m.short_input_data: short_val,
                              m.short_lengths: short_lengths_val,
+                             m.short_weights: short_weights_val,
                              m.targets: y_val,
                              m.dropout_keep_prob: 1.}
 
