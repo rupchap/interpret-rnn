@@ -14,6 +14,8 @@ class DataSet(object):
         self._shortweights = data['shortsentence_weights']
         self._relations = data['relation_vecs']
         self._num_examples = self._sentences.shape[0]
+
+        # Track position in data
         self._epochs_completed = 0
         self._index_in_epoch = 0
 
@@ -55,17 +57,17 @@ class DataSet(object):
                self._shortsentences, self._shortlengths, self._shortweights,\
                self._relations
 
-    @property
-    def sentences(self):
-        return self._sentences
-
-    @property
-    def relations(self):
-        return self._relations
-
-    @property
-    def lengths(self):
-        return self._lengths
+    # @property
+    # def sentences(self):
+    #     return self._sentences
+    #
+    # @property
+    # def relations(self):
+    #     return self._relations
+    #
+    # @property
+    # def lengths(self):
+    #     return self._lengths
 
     @property
     def num_examples(self):

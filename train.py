@@ -140,7 +140,7 @@ def main():
 
                 # decay learning rate if not improving
                 if len(previous_val_costs) > 2 and cost_val > max(previous_val_costs[-3:]):
-                    m.decay_lr(sess, 0.9)
+                    m.decay_lr(sess, config.lr_decay)
                     print('decayed lr to:', sess.run(m.lr, feed_dict))
                 previous_val_costs.append(cost_val)
 

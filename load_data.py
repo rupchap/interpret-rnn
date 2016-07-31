@@ -247,8 +247,7 @@ def process_data(data, config):
                          sentence in data['sentence_vecs']]
     data['sentence_pad_vecs'] = np.array(sentence_pad_vecs, dtype=np.int32)
 
-    # Create shortsentence_weights to be 1.0 for all tokens, except 0.0 for padding.
-
+    # Create sentence_weights to be 1.0 for all tokens, except 0.0 for padding.
     sentence_weights = np.ones_like(data['sentence_pad_vecs'], dtype=np.float32)
     sentence_weights[data['sentence_pad_vecs'] == PAD_ID] = 0.
     data['sentence_weights'] = sentence_weights
@@ -367,13 +366,8 @@ def shorten_sentence(sen, entA, entB):
 
 def build_initial_embedding(config):
 
-    embed_folder = config.embedfolder
-    vocab_folder = config.datafolder
-    embed_size = config.embed_size
-    vocab_size = config.vocab_size
-
-    embedfilepath = embed_folder + 'glove.6B.%id.txt' % embed_size
-    vocabfilepath = vocab_folder + 'vocab_%i.txt' % vocab_size
+    embedfilepath = config.embedfolder + 'glove.6B.%id.txt' % config.embed_size
+    vocabfilepath = config.datafolder + 'vocab_%i.txt' % config.vocab_size
 
     # read pre-cooked embeddings and vocab list
     embed = pd.read_csv(embedfilepath, delim_whitespace=True, quoting=csv.QUOTE_NONE, header=None)
