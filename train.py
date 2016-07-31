@@ -17,7 +17,7 @@ class Config(object):
     init_scale = 0.1
     learning_rate = 0.1
     lr_decay = 1
-    max_grad_norm = 50
+    max_grad_norm = 5
     num_layers = 2
     keep_prob = 1.0
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
