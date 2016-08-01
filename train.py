@@ -2,12 +2,9 @@ import tensorflow as tf
 import numpy as np
 from load_data import get_datasets
 from load_data import build_initial_embedding
-from tensorflow.python.ops import rnn_cell
-from tensorflow.python.ops import rnn
 import time
 
 from model import RNNClassifierModel
-from datasets import *
 
 # To run tensorboard:
 # tensorboard --logdir=/tmp/tflogs
@@ -16,10 +13,10 @@ from datasets import *
 class Config(object):
     init_scale = 0.1
     learning_rate = 0.1
-    lr_decay = 1
+    lr_decay = 0.9
     max_grad_norm = 5
+
     num_layers = 2
-    keep_prob = 1.0
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     hidden_size = 150
 
@@ -37,14 +34,16 @@ class Config(object):
 
     training_steps = 300000
     batch_size = 100
-    report_step = 500
-    save_step = 10000
+
+    report_step = 100
+    save_step = 2000
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
     datafolder = '/data/train/'
-    logfolder = '/tmp/tflogs/' + time.strftime("%Y%m%d-%H%M%S") + '/'
-    save_path = '/tmp/tfmodel.ckpt'
     embedfolder = '/data/glove/'
+    dtstr = time.strftime("%Y%m%d-%H%M%S")
+    logfolder = '/tmp/tflogs/' + dtstr + '/'
+    save_path = '/tmp/tfckpt/tfmodel_' + dtstr + '.ckpt'
 
 
 def main():
@@ -54,7 +53,7 @@ def main():
     print('LOAD DATA')
     datasets = get_datasets(config)
     print('%i training examples loaded' % datasets.train.num_examples)
-    num_epochs = (1.0 * config.training_steps * config.batch_size) / datasets.train.num_examples
+    num_epochs = (1. * config.training_steps * config.batch_size) / datasets.train.num_examples
     print('%i steps of %i-batches = %f epochs' % (config.training_steps, config.batch_size, num_epochs))
 
     print('GET INITIAL WORD EMBEDDINGS')
@@ -87,16 +86,9 @@ def main():
         # loop over training steps
         for step in range(config.training_steps):
 
-            # get batch data
-            x_batch, lengths_batch, short_batch, short_lengths_batch, short_weights_batch, y_batch =\
-                datasets.train.next_batch(config.batch_size)
-            feed_dict = {m.input_data: x_batch,
-                         m.lengths: lengths_batch,
-                         m.short_input_data: short_batch,
-                         m.short_lengths: short_lengths_batch,
-                         m.short_weights: short_weights_batch,
-                         m.targets: y_batch,
-                         m.dropout_keep_prob: config.dropout_keep_prob}
+            # get batch data and make feed_dict
+            data_batch = datasets.train.next_batch(config.batch_size)
+            feed_dict = make_feed_dict(m, data_batch, config.dropout_keep_prob)
 
             # run a training step
             sess.run(m.train_op, feed_dict=feed_dict)
@@ -109,18 +101,9 @@ def main():
                 # get statistics on current batch
                 print('step:%2i batch cost:%8f ' % (step, cost_batch))
 
-                # TODO: hook up to Sebastien's prediction accuracy - may need to flip to a generative model??
-
                 # get statistics on validation data - no dropout
-                x_val, lengths_val, short_val, short_lengths_val, short_weights_val, y_val =\
-                    datasets.validation.get_all()
-                feed_dict = {m.input_data: x_val,
-                             m.lengths: lengths_val,
-                             m.short_input_data: short_val,
-                             m.short_lengths: short_lengths_val,
-                             m.short_weights: short_weights_val,
-                             m.targets: y_val,
-                             m.dropout_keep_prob: 1.}
+                data_val = datasets.validation.data
+                feed_dict = make_feed_dict(m, data_val, dropout_keep_prob=1.0)
 
                 summaries_val, accuracy_val, cost_val = sess.run([merged, m.accuracy, m.cost],
                                                                  feed_dict=feed_dict)
@@ -144,13 +127,22 @@ def main():
                     print('decayed lr to:', sess.run(m.lr, feed_dict))
                 previous_val_costs.append(cost_val)
 
-            # if step % config.save_step == 0:
-            #     save_path = config.save_step
-            #     saver.save(sess, save_path=save_path)
-            #     print('Model saved in: %s' % save_path)
+            if step % config.save_step == 0:
+                print('Saving model to: %s' % config.save_path)
+                saver.save(sess, config.save_path)
 
     print 'Optimisation complete'
 
+
+def make_feed_dict(m, data, dropout_keep_prob=1.):
+    feed_dict = {m.input_data: data['sentence'],
+                 m.lengths: data['sentence_lengths'],
+                 m.short_input_data: data['short'],
+                 m.short_lengths: data['short_lengths'],
+                 m.short_weights: data['short_weights'],
+                 m.targets: data['relation'],
+                 m.dropout_keep_prob: dropout_keep_prob}
+    return feed_dict
 
 if __name__ == "__main__":
     # m = RNNClassifierModel(config=Config())

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 
 class DataSet(object):
@@ -7,13 +8,17 @@ class DataSet(object):
         """Construct a DataSet.
         """
 
-        self._sentences = data['sentence_pad_vecs']
-        self._lengths = data['sentence_lengths']
-        self._shortsentences = data['shortsentence_pad_vecs']
-        self._shortlengths = data['shortsentence_lengths']
-        self._shortweights = data['shortsentence_weights']
-        self._relations = data['relation_vecs']
-        self._num_examples = self._sentences.shape[0]
+        # Select and relabel the elements of data needed for model dataset
+        dataset_dict = {'sentence': 'sentence_pad_vecs',
+                        'sentence_lengths': 'sentence_lengths',
+                        'short': 'shortsentence_pad_vecs',
+                        'short_lengths': 'shortsentence_lengths',
+                        'short_weights': 'shortsentence_weights',
+                        'relation': 'relation_vecs'
+                        }
+        self._data = {key: data[dataset_dict[key]] for key in dataset_dict}
+
+        self._num_examples = self._data['sentence'].shape[0]
 
         # Track position in data
         self._epochs_completed = 0
@@ -22,6 +27,7 @@ class DataSet(object):
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
 
+        # update position in data
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
 
@@ -32,12 +38,8 @@ class DataSet(object):
             # Shuffle the data
             perm = np.arange(self._num_examples)
             np.random.shuffle(perm)
-            self._sentences = self._sentences[perm]
-            self._relations = self._relations[perm]
-            self._lengths = self._lengths[perm]
-            self._shortsentences = self._shortsentences[perm]
-            self._shortlengths = self._shortlengths[perm]
-            self._shortweights = self._shortweights[perm]
+            for key in self._data.keys():
+                self._data[key] = self._data[key][perm]
 
             # Start next epoch
             start = 0
@@ -46,28 +48,13 @@ class DataSet(object):
 
         end = self._index_in_epoch
 
-        # return batch
-        return self._sentences[start:end], self._lengths[start:end],\
-               self._shortsentences[start:end], self._shortlengths[start:end], self._shortweights[start:end],\
-               self._relations[start:end]
+        data_batch = {key: self._data[key][start:end] for key in self._data.keys()}
 
-    def get_all(self):
-        """Return all examples from this data set."""
-        return self._sentences, self._lengths,\
-               self._shortsentences, self._shortlengths, self._shortweights,\
-               self._relations
+        return data_batch
 
-    # @property
-    # def sentences(self):
-    #     return self._sentences
-    #
-    # @property
-    # def relations(self):
-    #     return self._relations
-    #
-    # @property
-    # def lengths(self):
-    #     return self._lengths
+    @property
+    def data(self):
+        return self._data
 
     @property
     def num_examples(self):
