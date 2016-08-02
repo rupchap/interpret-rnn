@@ -3,6 +3,7 @@ import numpy as np
 from load_data import get_datasets
 from load_data import build_initial_embedding
 import time
+import os
 
 from model import RNNClassifierModel
 
@@ -43,7 +44,7 @@ class Config(object):
     embedfolder = '/data/glove/'
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = 'new'
+    modelname = 'testing'
 
 
 def main():
@@ -57,6 +58,8 @@ def main():
 
     logfolder = '/tmp/tflogs/' + modelname + '/'
     ckptpath = '/tmp/tfckpt/' + modelname + '/'
+    if not os.path.exists(ckptpath):
+        os.makedirs(ckptpath)
     ckptfile = ckptpath + 'model.ckpt'
 
     # TODO: create ckptfolder if it doesn't exist!!
