@@ -44,7 +44,7 @@ class Config(object):
     embedfolder = '/data/glove/'
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = 'testing'
+    modelname = 'new2'
 
 
 def main():
@@ -132,13 +132,14 @@ def main():
                 print('step:%2i val cost:%8f ' % (step, cost_val))
                 writer_val.add_summary(summaries_val, step)
 
-                accuracy_byclass = sess.run(m.accuracy_byclass, feed_dict=feed_dict)
+                accuracy_byclass, pred_byclass, actual_byclass = sess.run([m.accuracy_byclass,
+                                                                           m.pred_byclass,
+                                                                           m.actual_byclass],
+                                                                          feed_dict=feed_dict)
                 print('class accuracy:')
                 print(accuracy_byclass)
-                pred_byclass = sess.run(m.pred_byclass, feed_dict=feed_dict)
                 print('class prediction count:')
                 print(pred_byclass)
-                actual_byclass = sess.run(m.actual_byclass, feed_dict=feed_dict)
                 print('class actual count:')
                 print(actual_byclass)
 

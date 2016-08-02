@@ -112,8 +112,18 @@ class RNNClassifierModel(object):
             cost = cost_relation + cost_short
             self._cost = cost
 
+        with tf.name_scope('Optimizer'):
+            # Initial learning rate
+            self._lr = tf.Variable(config.learning_rate, trainable=False)
+
+            # Optimizer with clipped gradients
+            tvars = tf.trainable_variables()
+            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+            self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+
         # Predict and assess accuracy
-        with tf.name_scope('Accuracy'):
+        with tf.name_scope('RelationAccuracy'):
             y_proba = tf.nn.softmax(logits_rel)
             y_pred = tf.arg_max(logits_rel, dimension=1)
             y_pred = tf.cast(y_pred, tf.int32)
@@ -125,7 +135,9 @@ class RNNClassifierModel(object):
             self._ypred = y_pred
             self._accuracy = accuracy
 
-            # accuracy per class
+            tf.scalar_summary('accuracy', accuracy)
+
+        with tf.name_scope('RelationAccuracyByClass'):
             y_pred_onehot = tf.one_hot(y_pred, depth=config.rel_vocab_size, dtype=tf.float32)
             y_actual_onehot = tf.one_hot(self._y, depth=config.rel_vocab_size, dtype=tf.float32)
             y_correct_onehot = tf.mul(y_actual_onehot, y_pred_onehot)
@@ -136,17 +148,8 @@ class RNNClassifierModel(object):
             self._pred_byclass = pred_byclass
             self._actual_byclass = actual_byclass
 
-            tf.scalar_summary('accuracy', accuracy)
-
-        with tf.name_scope('Optimizer'):
-            # Initial learning rate
-            self._lr = tf.Variable(config.learning_rate, trainable=False)
-
-            # Optimizer with clipped gradients
-            tvars = tf.trainable_variables()
-            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
-            optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
-            self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+        with tf.name_scope('ShortPrediction'):
+            self._probas_short = [tf.nn.softmax(logits) for logits in logits_short]
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self.lr, lr_value))
@@ -178,6 +181,10 @@ class RNNClassifierModel(object):
     @property
     def short_weights(self):
         return self._shortweights
+
+    @property
+    def short_probas(self):
+        return self._probas_short
 
     @property
     def targets(self):
