@@ -24,18 +24,13 @@ class RNNClassifierModel(object):
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
-        # construct embedding
-        if init_embedding is not None:
-            embedding = tf.Variable(init_embedding, name='embedding')
-        else:
-            embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
-
         with tf.variable_scope("BatchSize"):
             batch_size = tf.shape(self._x)[0]
 
         # embedding
         with tf.name_scope('Embedding'):
-            inputs = tf.nn.embedding_lookup(embedding, self._x)
+            self._embedding = tf.get_variable("embedding", [config.vocab_size, config.embed_size])
+            inputs = tf.nn.embedding_lookup(self._embedding, self._x)
 
         # bi-RNN
         with tf.variable_scope("RNN"):
@@ -70,7 +65,7 @@ class RNNClassifierModel(object):
             gos = tf.fill([batch_size, 1], 2)
             pads = tf.zeros([batch_size, config.max_shortsentence_length - 1], dtype=tf.int32)
             shortinputs = tf.concat(1, [gos, pads])
-            shortinputs_embed = tf.nn.embedding_lookup(embedding, shortinputs)
+            shortinputs_embed = tf.nn.embedding_lookup(self._embedding, shortinputs)
 
         # TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortDecoder"):
@@ -167,6 +162,10 @@ class RNNClassifierModel(object):
     @property
     def lengths(self):
         return self._lengths
+
+    @property
+    def embedding(self):
+        return self._embedding
 
     @property
     def short_input_data(self):
