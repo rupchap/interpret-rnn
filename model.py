@@ -132,7 +132,7 @@ class RNNClassifierModel(object):
 
         # Predict and assess accuracy
         with tf.name_scope('Evaluate'):
-            y_proba = tf.nn.softmax(logits_rel)
+            self._probas = tf.nn.softmax(logits_rel)
 
             y_pred = tf.cast(tf.arg_max(logits_rel, dimension=1), tf.int32)
             y_actual = self._y
@@ -191,8 +191,12 @@ class RNNClassifierModel(object):
         return self._shortweights
 
     @property
-    def short_probas(self):
+    def probas_short(self):
         return self._probas_short
+
+    @property
+    def probas(self):
+        return self._probas
 
     @property
     def targets(self):
