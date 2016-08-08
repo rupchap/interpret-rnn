@@ -24,6 +24,8 @@ class RNNClassifierModel(object):
         # dropout placeholder
         self._dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
+        self._global_step = tf.Variable(0, name='global_step', trainable=False)
+
         with tf.variable_scope("BatchSize"):
             batch_size = tf.shape(self._x)[0]
 
@@ -43,8 +45,8 @@ class RNNClassifierModel(object):
             cell_bw = rnn_cell.DropoutWrapper(cell_bw, output_keep_prob=self._dropout_keep_prob)
 
             # Multilayer
-            cell_fw = rnn_cell.MultiRNNCell([cell_fw] * config.num_layers, state_is_tuple=True)
-            cell_bw = rnn_cell.MultiRNNCell([cell_bw] * config.num_layers, state_is_tuple=True)
+            cell_fw = rnn_cell.MultiRNNCell([cell_fw] * 2, state_is_tuple=True)
+            cell_bw = rnn_cell.MultiRNNCell([cell_bw] * 2, state_is_tuple=True)
 
             # convert inputs tensor to list of 2d tensors [batch_size * embed_size] of length max_sentence_length
             inputs = [tf.squeeze(input_, [1]) for input_ in tf.split(1, config.max_sentence_length, inputs)]
@@ -67,7 +69,6 @@ class RNNClassifierModel(object):
             shortinputs = tf.concat(1, [gos, pads])
             shortinputs_embed = tf.nn.embedding_lookup(self._embedding, shortinputs)
 
-        # TODO: just feeding FW state from bidirectional RNN for now - should also use BW state?
         with tf.variable_scope("ShortDecoder"):
             shortinputs_embed = [tf.squeeze(input_, [1]) for input_ in
                                  tf.split(1, config.max_shortsentence_length, shortinputs_embed)]
@@ -76,10 +77,9 @@ class RNNClassifierModel(object):
                                                              initial_state=output_state_comb[0],
                                                              cell=cell_dc)
 
-        # TODO: can we use the embedding matrix here somehow?
         with tf.variable_scope("ShortLogits"):
-            W_short = tf.get_variable("W_short", [config.hidden_size*2, config.vocab_size])
-            b_short = tf.get_variable("b_short", [config.vocab_size])
+            W_short = tf.get_variable("W_short", [config.hidden_size*2, config.vocab_size_short])
+            b_short = tf.get_variable("b_short", [config.vocab_size_short])
             logits_short = [tf.matmul(output, W_short) + b_short for output in outputs_dc]
 
         with tf.variable_scope('ShortCost'):
@@ -91,7 +91,6 @@ class RNNClassifierModel(object):
                                                      weights=weights)
             self._cost_short = cost_short
             tf.scalar_summary('cost_short', cost_short)
-
 
         # DECODE RELATION USING LAYER 1 OUTPUT FROM RNN
         # Linear transform - final RNN state to relation
@@ -109,7 +108,13 @@ class RNNClassifierModel(object):
 
         # TOTAL COST
         with tf.variable_scope('TotalCost'):
-            cost = cost_relation + cost_short
+            if config.cost_with_relation:
+                if config.cost_with_short:
+                    cost = cost_relation + cost_short
+                else:
+                    cost = cost_relation
+            else:
+                cost = cost_short
             self._cost = cost
 
         with tf.name_scope('Optimizer'):
@@ -117,36 +122,39 @@ class RNNClassifierModel(object):
             self._lr = tf.Variable(config.learning_rate, trainable=False)
 
             # Optimizer with clipped gradients
-            tvars = tf.trainable_variables()
-            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
-            optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
-            self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+            # tvars = tf.trainable_variables()
+            # grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
+            # optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+            # self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=self._global_step)
+
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate=self._lr)
+            self._train_op = optimizer.minimize(cost, global_step=self._global_step)
 
         # Predict and assess accuracy
-        with tf.name_scope('RelationAccuracy'):
+        with tf.name_scope('Evaluate'):
             y_proba = tf.nn.softmax(logits_rel)
-            y_pred = tf.arg_max(logits_rel, dimension=1)
-            y_pred = tf.cast(y_pred, tf.int32)
+
+            y_pred = tf.cast(tf.arg_max(logits_rel, dimension=1), tf.int32)
             y_actual = self._y
-            correct_prediction = tf.equal(y_pred, y_actual)
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-            self._proba = y_proba
-            self._ypred = y_pred
-            self._accuracy = accuracy
-
-            tf.scalar_summary('accuracy', accuracy)
-
-        with tf.name_scope('RelationAccuracyByClass'):
             y_pred_onehot = tf.one_hot(y_pred, depth=config.rel_vocab_size, dtype=tf.float32)
-            y_actual_onehot = tf.one_hot(self._y, depth=config.rel_vocab_size, dtype=tf.float32)
+            y_actual_onehot = tf.one_hot(y_actual, depth=config.rel_vocab_size, dtype=tf.float32)
             y_correct_onehot = tf.mul(y_actual_onehot, y_pred_onehot)
-            accuracy_byclass = tf.reduce_mean(y_correct_onehot, 0)
-            pred_byclass = tf.reduce_sum(y_pred_onehot, 0)
-            actual_byclass = tf.reduce_sum(y_actual_onehot, 0)
-            self._accuracy_byclass = accuracy_byclass
-            self._pred_byclass = pred_byclass
-            self._actual_byclass = actual_byclass
+
+            total_pred_byclass = tf.reduce_sum(y_pred_onehot, 0)
+            total_actual_byclass = tf.reduce_sum(y_actual_onehot, 0)
+            total_correct_byclass = tf.reduce_sum(y_correct_onehot, 0)
+
+            precision_byclass = tf.truediv(total_correct_byclass, total_pred_byclass)
+            recall_byclass = tf.truediv(total_correct_byclass, total_actual_byclass)
+            f1_byclass = 2. * tf.truediv(tf.mul(precision_byclass, recall_byclass),
+                                         tf.add(precision_byclass, recall_byclass))
+
+            self._pred_byclass = total_pred_byclass
+            self._actual_byclass = total_actual_byclass
+            self._precision_byclass = precision_byclass
+            self._recall_byclass = recall_byclass
+            self._f1_byclass = f1_byclass
 
         with tf.name_scope('ShortPrediction'):
             self._probas_short = [tf.nn.softmax(logits) for logits in logits_short]
@@ -191,40 +199,36 @@ class RNNClassifierModel(object):
         return self._y
 
     @property
-    def predictions(self):
-        return self._ypred
-
-    @property
-    def proba(self):
-        return self._proba
-
-    @property
     def cost(self):
         return self._cost
-
-    @property
-    def accuracy(self):
-        return self._accuracy\
-
-    @property
-    def accuracy_byclass(self):
-        return self._accuracy_byclass
-
-    @property
-    def pred_byclass(self):
-        return self._pred_byclass
 
     @property
     def actual_byclass(self):
         return self._actual_byclass
 
     @property
-    def final_state(self):
-        return self._final_state
+    def pred_byclass(self):
+        return self._pred_byclass
+
+    @property
+    def f1_byclass(self):
+        return self._f1_byclass
+
+    @property
+    def precision_byclass(self):
+        return self._precision_byclass
+
+    @property
+    def recall_byclass(self):
+        return self._recall_byclass
 
     @property
     def lr(self):
         return self._lr
+
+    @property
+    def global_step(self):
+        return self._global_step
 
     @property
     def dropout_keep_prob(self):

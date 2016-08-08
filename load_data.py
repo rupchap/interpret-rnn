@@ -97,7 +97,7 @@ def build_data(config=DataConfig()):
     build_short_sentences_file(folder=config.datafolder)  # run scala script
     data = read_data_from_individual_files(folder=config.datafolder)
 
-    data = filter_data(data)
+    data = filter_data(data, keep_unlabeled=False, keep_negative=False)
 
     data = process_data(data, config)
 
@@ -225,7 +225,8 @@ def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=Tru
 
 
 def process_data(data, config):
-    
+
+    # SENTENCES
     data['masked_sentences'] = mask_entities_in_sentences(data['sentences'], data['entAs'], data['entBs'])
 
     data['stemmed_sentences'] = stem_sentences(data['masked_sentences'])
@@ -252,10 +253,15 @@ def process_data(data, config):
     sentence_weights[data['sentence_pad_vecs'] == PAD_ID] = 0.
     data['sentence_weights'] = sentence_weights
 
+    # SHORT SENTENCES
     data['stemmed_shortsentences'] = stem_sentences(data['shortsentences'])
 
+    vocab_short, rev_vocab_short = build_vocab(data['stemmed_shortsentences'], config.vocab_size_short)
+    vocab_filename_short = config.datafolder + ('vocab_short_%i' % config.vocab_size_short) + '.txt'
+    save_list_to_file(rev_vocab_short, vocab_filename_short)
+
     # vectorise short sentences - use same vocab as for long sentences
-    data['shortsentence_vecs'] = [vectorize_sentence(sentence, vocab, addGo=True, addEOS=True)
+    data['shortsentence_vecs'] = [vectorize_sentence(sentence, vocab_short, addGo=True, addEOS=True)
                                   for sentence in data['stemmed_shortsentences']]
 
     # get short sentence lengths - as np.array
@@ -272,6 +278,7 @@ def process_data(data, config):
     shortsentence_weights[data['shortsentence_pad_vecs'] == PAD_ID] = 0.
     data['shortsentence_weights'] = shortsentence_weights
 
+    # RELATIONS
     # todo: refactor to use same vocab function as for sentences
     rel_counter = Counter(data['relations'])
     rel_vocab_list = [_UNK] + sorted(rel_counter, key=rel_counter.get, reverse=True)
@@ -306,7 +313,7 @@ def stem_sentences(sentences):
     return sentences
 
 
-def build_vocab(sentences, vocab_size):
+def build_vocab(sentences, vocab_size, start_vocab=_START_VOCAB):
     vocab_counter = {}
     counter = 0
     for sentence in sentences:
@@ -319,7 +326,7 @@ def build_vocab(sentences, vocab_size):
                 vocab_counter[word] += 1
             else:
                 vocab_counter[word] = 1
-    reverse_vocab = _START_VOCAB + sorted(vocab_counter, key=vocab_counter.get, reverse=True)
+    reverse_vocab = start_vocab + sorted(vocab_counter, key=vocab_counter.get, reverse=True)
 
     # crop to vocab_size
     if len(reverse_vocab) > vocab_size:
