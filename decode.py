@@ -45,7 +45,7 @@ def main():
     print('BUILD GRAPH')
     m = RNNClassifierModel(config=config)
 
-    data_batch = datasets.train.next_batch(2)
+    data_batch = datasets.train.next_batch(1)
     feed_dict = make_feed_dict(m, data_batch, dropout_keep_prob=1.)
 
     saver = tf.train.Saver()
@@ -59,11 +59,17 @@ def main():
         print('probas:')
         print(proba)
 
-        probashort = sess.run(m.probas_short, feed_dict=feed_dict)
-        print('probashort:')
-        print(probashort)
+        # probashort = sess.run(m.probas_short, feed_dict=feed_dict)
+        # print('probashort:')
+        # print(probashort)
 
-#         TODO: pull back top 3 with probs; map to vocabs.  print long, short actual, short top 3 etc.
+        topk_short = sess.run(m.topk_short, feed_dict=feed_dict)
+
+        top1 = [topk[0][1] for topk in topk_short]
+        top1sent = [vocab_short[wrd] for wrd in top1]
+        print top1sent
+
+        # TODO: pull back top 3 with probs; map to vocabs.  print long, short actual, short top 3 etc.
 
 
 if __name__ == "__main__":
