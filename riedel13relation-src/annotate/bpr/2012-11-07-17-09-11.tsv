@@ -1,0 +1,63 @@
+1	REL$/location/location/containedby	Knin	Croatia
+1	REL$/location/neighborhood/neighborhood_of	North Beach	San Francisco
+0	REL$/book/book_edition/place_of_publication	Fairfield	Stamford
+1	REL$/sports/sports_team_owner/teams_owned	Paul Allen	Portland Trail Blazers
+1	REL$/people/person/parents	Toby Stephens	Maggie Smith
+1	REL$/location/location/containedby	Mount Holyoke College	South Hadley
+1	REL$/people/person/place_of_birth	Copland	Brooklyn
+1	REL$/organization/parent/child	Macy	Bullock
+1	REL$/sports/sports_team_owner/teams_owned	Jack Kent Cooke	Redskins
+1	REL$/people/person/place_of_birth	Patton	Glen Ridge
+1	REL$/location/location/containedby	Ramapo College	Mahwah
+1	REL$/book/book_edition/author_editor	James Stewart	Donald Dewey
+1	REL$/people/deceased_person/place_of_death	Lum Harris	Pell City
+1	REL$/people/person/place_of_birth	Mr. Butts	Poughkeepsie
+1	REL$/music/artist/origin	Nizar Qabbani	London
+1	REL$/people/deceased_person/place_of_death	Paul Draper	Woodstock
+1	REL$/people/deceased_person/place_of_death	Arthur Briggs	Chantilly
+1	REL$/people/person/place_of_birth	Sargent	Italy
+1	REL$/people/person/place_of_birth	Paul Engle	Cedar Rapids
+1	REL$/business/company/place_founded	Quality Education Data	Denver
+1	REL$/people/person/parents	Monica Mancini	Henry Mancini
+1	REL$/business/company/place_founded	Comerica	Michigan
+1	REL$/people/deceased_person/place_of_death	Graenum Berger	New Rochelle
+1	REL$/people/person/place_of_birth	Thurgood Marshall	Baltimore
+0	REL$/music/artist/origin	Mayor	Brooklyn
+0	REL$/film/film/written_by	New York	Carlinhos Brown
+1	REL$/people/deceased_person/place_of_death	Ray Johnson	Sag Harbor
+1	REL$/book/author/works_written	McEwan	Cement Garden
+0	REL$/film/film/written_by	Harlem Renaissance	Pearl Cleage
+1	REL$/book/author/works_written	Tom McNeal	Goodnight
+1	REL$/location/location/containedby	Pratt Institute	New York
+1	REL$/people/person/parents	Crown Prince	Abdel Aziz
+1	REL$/film/film/written_by	Grizzly Mountain	Peter White
+1	REL$/sports/sports_team_owner/teams_owned	Jack Brooks	Raiders
+1	REL$/people/person/nationality	Pavel Grachev	Russia
+1	REL$/people/deceased_person/place_of_death	Leon Barzin	Naples
+1	REL$/people/deceased_person/place_of_death	Robert Casadesus	Paris
+0	REL$/sports/sports_team/arena_stadium	Cleveland	Kingdome
+0	REL$/book/author/works_written	Joe Haldeman	Hugo
+1	REL$/people/deceased_person/place_of_death	Lex Hixon	Riverdale
+1	REL$/location/location/containedby	Rockland	Maine
+1	REL$/book/author/works_written	Abigail Thernstrom	America
+1	REL$/location/location/containedby	J.C. Penney	Poughquag
+1	REL$/people/deceased_person/place_of_death	Reid Shelton	Portland
+1	REL$/book/author/works_written	Thomas Lynch	Still Life
+0	REL$/business/company/founders	Tanzania	Julius K. Nyerere
+0	REL$/media_common/netflix_genre/titles	NBC	Life Stories
+0	REL$/film/film/directed_by	Cloverdale	Richard Allen Davis
+1	REL$/location/neighborhood/neighborhood_of	Brownsville	Miami
+0	REL$/music/artist/origin	Melvin Belli	San Francisco
+0	REL$/film/film/directed_by	Sweeney Todd	Declan Donnellan
+1	REL$/organization/parent/child	Time Warner	Turner Broadcasting System
+1	REL$/business/person/company	Alexander Dallin	Stanford University
+1	REL$/location/location/containedby	Selma University	Selma
+1	REL$/people/person/nationality	Walter Riester	Germany
+1	REL$/location/location/containedby	Sierra Blanca	Texas
+1	REL$/people/deceased_person/place_of_death	M. Evans	Key West
+1	REL$/location/location/containedby	Shandaken	Ulster County
+0	REL$/location/location/containedby	East Alton	Mississippi
+0	REL$/people/person/nationality	Paris	Culture
+0	REL$/business/person/company	Nobuo Mii	Japan
+0	REL$/people/person/nationality	Dullah Omar	Justice
+1	REL$/book/author/works_written	George Bernard Shaw	Black Woman

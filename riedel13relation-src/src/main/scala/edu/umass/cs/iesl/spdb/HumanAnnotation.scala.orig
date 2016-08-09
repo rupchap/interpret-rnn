@@ -1,0 +1,56 @@
+package edu.umass.cs.iesl.spdb
+
+import collection.mutable.HashMap
+import io.Source
+import java.io.PrintStream
+
+/**
+ * Created by IntelliJ IDEA.
+ * User: lmyao
+ * Date: 10/16/12
+ * Time: 1:35 PM
+ * To change this template use File | Settings | File Templates.
+ */
+
+object HumanAnnotation extends HasLogger{
+  val dir =  "/iesl/canvas/lmyao/ie_ner/unsuprel/univSchema/"
+  val testmentionfile = dir + "/nyt-freebase.test.triples.universal.mention.txt"  //from this file we extract entity pair -> sentence
+
+  def main(args: Array[String]) {
+    val subdir = if(args.length > 0) args(0) else "/iesl/canvas/lmyao/ie_ner/unsuprel/univSchema/9_10_2012/run_16_6_42_116"
+    val pcaRankOutput = subdir  + "/nyt_pair.rank.txt"
+    val output = pcaRankOutput + ".4annotation"
+    prepare4Annotation(pcaRankOutput,testmentionfile,output)
+  }
+  
+  def prepare4Annotation(rankfile : String, sourcefile : String,  output : String){
+    val pair2sen = new HashMap[String, String]    // arg1 -> rel arg1 arg2
+    var source = Source.fromFile(sourcefile)
+    for (line <- source.getLines; if (!line.startsWith("#Document"))) {
+      val fields = line.split("\t")
+      val pair = fields(1) + "\t" + fields(2)
+      val sen = fields(fields.length -1)
+      pair2sen += pair -> sen
+    }
+    source.close()
+
+    val os = new PrintStream(output)
+    // score  src dest  gold pred
+    source = Source.fromFile(rankfile)
+    for (instance <- source.getLines()){
+      val fields = instance.split("\t")
+      val pair = fields(1) + "\t" + fields(2)
+      val sen = pair2sen.getOrElse(pair,"")
+      if(fields(3).compareTo(fields(4)) == 0)   os.println("Y\t" + instance + "\t" + sen)
+      else if(fields(3) != "NA")  os.println("N\t" + instance + "\t" + sen)
+      else os.println ("\t" + instance + "\t" + sen)
+    }
+    os.close
+  }
+}
+
+object SebAnnotate {
+  def main(args: Array[String]) {
+    HumanAnnotation.prepare4Annotation(args(0),args(1),args(2))
+  }
+}

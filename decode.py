@@ -18,7 +18,7 @@ def main():
     modelname = '20160808-005740'
     # modelname = config.modelname
 
-    ckptpath = '/tmp/tfckpt/' + modelname + '/'
+    ckptpath = '/data/tfckpt/' + modelname + '/'
     ckpt = tf.train.get_checkpoint_state(ckptpath)
     print ckpt
 
@@ -55,9 +55,13 @@ def main():
         print('RESTORE VARIABLES FOR PREVIOUS MODEL')
         saver.restore(sess, ckpt.model_checkpoint_path)
 
-        proba = sess.run(m.probas, feed_dict=feed_dict)
-        print('probas:')
-        print(proba)
+        print(feed_dict)
+
+        data = sess.run([m.topk_short,
+                         m.topk_rel],
+                        feed_dict=feed_dict)
+        print('data:')
+        print(data)
 
         # probashort = sess.run(m.probas_short, feed_dict=feed_dict)
         # print('probashort:')

@@ -1,0 +1,40 @@
+# Chart settings
+set title "Precision at K"
+set key right center
+set terminal dumb enhanced
+
+# XYChart settings
+set nologscale
+set xr [*:*] noreverse
+set yr [*:*] noreverse
+set xlabel "Facts"
+set ylabel "Precision"
+# XYData Plotting
+plot \
+'-'  using 1:2 title "maxent-ds.rank.dev.r10000.txt" with linespoints , \
+'-'  using 1:2 title "maxent-ds.topic.rank.dev.r10000.txt" with linespoints , \
+'-'  using 1:2 title "mihai.multi.dev.r10000.txt" with linespoints , \
+'-'  using 1:2 title "nyt_pair.sub.rank.txt" with linespoints , \
+'-'  using 1:2 title "nyt_pair.sub.rank.txt" with linespoints , \
+'-'  using 1:2 title "nyt_pair.sub.rank.txt" with linespoints , \
+'-'  using 1:2 title "nyt_pair.sub.rank.txt" with linespoints 
+# maxent-ds.rank.dev.r10000.txt
+end
+# maxent-ds.topic.rank.dev.r10000.txt
+end
+# mihai.multi.dev.r10000.txt
+end
+# nyt_pair.sub.rank.txt
+end
+# nyt_pair.sub.rank.txt
+end
+# nyt_pair.sub.rank.txt
+end
+# nyt_pair.sub.rank.txt
+end
+
+# Wrapup
+set terminal pdf enhanced linewidth 3.0  
+set output "teams_owner_teams_owned$.pdf"
+refresh
+unset output

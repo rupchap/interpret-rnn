@@ -1,0 +1,117 @@
+FRESH INSTALL
+=============
+
+MACHINE
+-------
+Intel i5-6600k @3.5GHz
+32GB DDR3 1866MHz [8x4]
+NVIDIA 980 Ti
+
+BIOS
+----
+ASUS Z170-P D3 v.1801
+Default settings plus Advanced -> System Agen -> Primary Display = CPU Graphics
+Switched UEFI mode off in Bios!!
+Advanced > Boot > Secure Boot --> delete keys; switch to 'other OS'
+
+UBUNTU
+------
+14.04.4 LTS
+64bit
+boot from USB
+
+'Install Ubuntu' [not OEM]
+Download updates while installing
+Erase disk and install
+
+Machine name: WHITEBOX
+Username: rupchap
+Password: Hello244
+
+CHECKS
+------
+lspci | grep -i NVIDIA 				check card visible (GTX980ti)
+uname -m && cat /etc/*release		check ubuntu (14.04)
+gcc --version						check gcc version (4.8.4)
+
+LINK HEADERS (forgot to do this time)
+------------
+sudo apt-get install linux-headers-$(uname -r)
+
+DEAL WITH NOUVEAU
+-----------------
+Create a file at /etc/modprobe.d/blacklist-nouveau.conf with the following contents:
+blacklist nouveau
+options nouveau modeset=0
+Regenerate the kernel initramfs:
+$ sudo update-initramfs -u
+
+REBOOT TO TEXT
+--------------
+edit /etc/default/grub to boot to 'text' not 'quiet splash'
+sudo update-grub
+
+reboot
+
+
+CUDA
+----
+sudo sh cuda_<version>_linux.run
+
+YES to drivers and toolkit, NO to OpengL
+
+
+SETUP PATHS
+-----------
+add below to .bashrc
+
+export PATH=/usr/local/cuda-7.0/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-7.0/lib64:$LD_LIBRARY_PATH
+
+sudo source .bashrc
+
+
+INSTALL SAMPLES
+---------------
+cuda-install-samples-7.0.sh
+
+needed to install g++
+sudo apt-get install g++
+
+'make' in Samples folder [takes a while]
+
+test deviceQuery and bandwidthTest in 1_Utilities
+
+INSTALL ANACONDA
+----------------
+bash Anaconda_filename.sh
+DON'T RUN AS SUDO
+
+INSTALL CUDNN 
+-------------
+USE v4 FOR COMPATABILITY WITH TENSORFLOW
+
+just untar and copy into cuda folder
+sudo cp lib* /usr/local/cuda/lib64/
+sudo cp cudnn.h /usr/local/cuda/include/
+
+INSTALL TENSORFLOW
+------------------
+source activate [not sure if needed - but want to get tf installed in anaconda default location]
+then install with pip
+1. set $TF_BINARY_URL to latest location
+pip install --upgrade $TF_BINARY_URL --ignore-installed
+
+
+INSTALL SCALA
+-------------
+sudo apt-get install scala
+
+INSTALL GIT
+--------------
+sudo apt-get install git
+
+Copy over additions to .bashrc and .git-completion.bash and .git-prompt.sh from mac versions
+
+INSTALL PYCHARM
+---------------

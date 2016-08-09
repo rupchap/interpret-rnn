@@ -1,0 +1,58 @@
+[0m[[0minfo[0m] [0mRunning edu.umass.cs.iesl.spdb.AnnotationTool /Users/sriedel/corpora/univSchema/maxent-ds/maxent-ds.rank.dev.txt /Users/sriedel/Dropbox/annotate/bpr /Users/sriedel/corpora/univSchema/nyt-freebase.test.triples.universal.mention.txt directed[0m
+[0m[[0mdebug[0m] [0mStarting sandboxed run...[0m
+[0m[[0mdebug[0m] [0mWaiting for threads to exit or System.exit to be called.[0m
+[0m[[0mdebug[0m] [0m  Classpath:[0m
+[0m[[0mdebug[0m] [0m	/Users/sriedel/projects/spdb/eval/target/scala-2.9.2/classes[0m
+[0m[[0mdebug[0m] [0m	/Users/sriedel/.sbt/boot/scala-2.9.2/lib/scala-library.jar[0m
+[0m[[0mdebug[0m] [0mWaiting for thread run-main to exit[0m
+[0m[[31merror[0m] [0m(run-main) java.lang.ClassNotFoundException: edu.umass.cs.iesl.spdb.AnnotationTool[0m
+java.lang.ClassNotFoundException: edu.umass.cs.iesl.spdb.AnnotationTool
+	at java.net.URLClassLoader$1.run(URLClassLoader.java:202)
+	at java.security.AccessController.doPrivileged(Native Method)
+	at java.net.URLClassLoader.findClass(URLClassLoader.java:190)
+	at java.lang.ClassLoader.loadClass(ClassLoader.java:306)
+	at java.lang.ClassLoader.loadClass(ClassLoader.java:247)
+	at java.lang.Class.forName0(Native Method)
+	at java.lang.Class.forName(Class.java:247)
+	at sbt.Run.getMainMethod(Run.scala:73)
+	at sbt.Run.run0(Run.scala:60)
+	at sbt.Run.execute$1(Run.scala:50)
+	at sbt.Run$$anonfun$run$1.apply$mcV$sp(Run.scala:54)
+	at sbt.TrapExit$.executeMain$1(TrapExit.scala:33)
+	at sbt.TrapExit$$anon$1.run(TrapExit.scala:42)
+[0m[[0mdebug[0m] [0m	Thread run-main exited.[0m
+[0m[[0mdebug[0m] [0mInterrupting remaining threads (should be all daemons).[0m
+[0m[[0mdebug[0m] [0mSandboxed run complete..[0m
+java.lang.RuntimeException: Nonzero exit code: 1
+	at scala.sys.package$.error(package.scala:27)
+	at sbt.BuildCommon$$anonfun$toError$1.apply(Defaults.scala:1347)
+	at sbt.BuildCommon$$anonfun$toError$1.apply(Defaults.scala:1347)
+	at scala.Option.foreach(Option.scala:197)
+	at sbt.BuildCommon$class.toError(Defaults.scala:1347)
+	at sbt.Defaults$.toError(Defaults.scala:34)
+	at sbt.Defaults$$anonfun$runMainTask$2$$anonfun$apply$26.apply(Defaults.scala:511)
+	at sbt.Defaults$$anonfun$runMainTask$2$$anonfun$apply$26.apply(Defaults.scala:510)
+	at sbt.Scoped$$anonfun$hf4$1.apply(Structure.scala:580)
+	at sbt.Scoped$$anonfun$hf4$1.apply(Structure.scala:580)
+	at scala.Function1$$anonfun$compose$1.apply(Function1.scala:49)
+	at sbt.Scoped$Reduced$$anonfun$combine$1$$anonfun$apply$12.apply(Structure.scala:311)
+	at sbt.Scoped$Reduced$$anonfun$combine$1$$anonfun$apply$12.apply(Structure.scala:311)
+	at sbt.$tilde$greater$$anonfun$$u2219$1.apply(TypeFunctions.scala:41)
+	at sbt.std.Transform$$anon$5.work(System.scala:71)
+	at sbt.Execute$$anonfun$submit$1$$anonfun$apply$1.apply(Execute.scala:232)
+	at sbt.Execute$$anonfun$submit$1$$anonfun$apply$1.apply(Execute.scala:232)
+	at sbt.ErrorHandling$.wideConvert(ErrorHandling.scala:18)
+	at sbt.Execute.work(Execute.scala:238)
+	at sbt.Execute$$anonfun$submit$1.apply(Execute.scala:232)
+	at sbt.Execute$$anonfun$submit$1.apply(Execute.scala:232)
+	at sbt.ConcurrentRestrictions$$anon$4$$anonfun$1.apply(ConcurrentRestrictions.scala:159)
+	at sbt.CompletionService$$anon$2.call(CompletionService.scala:30)
+	at java.util.concurrent.FutureTask$Sync.innerRun(FutureTask.java:303)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:138)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:439)
+	at java.util.concurrent.FutureTask$Sync.innerRun(FutureTask.java:303)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:138)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.runTask(ThreadPoolExecutor.java:886)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:908)
+	at java.lang.Thread.run(Thread.java:680)
+[0m[[31merror[0m] [0m(compile:[31mrun-main[0m) Nonzero exit code: 1[0m

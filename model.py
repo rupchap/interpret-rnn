@@ -132,8 +132,6 @@ class RNNClassifierModel(object):
 
         # Predict and assess accuracy
         with tf.name_scope('Evaluate'):
-            self._probas = tf.nn.softmax(logits_rel)
-
             y_pred = tf.cast(tf.arg_max(logits_rel, dimension=1), tf.int32)
             y_actual = self._y
 
@@ -158,6 +156,11 @@ class RNNClassifierModel(object):
 
         with tf.name_scope('ShortPrediction'):
             self._probas_short = [tf.nn.softmax(logits) for logits in logits_short]
+            self._topk_short = [tf.nn.top_k(probas, k=3) for probas in self._probas_short]
+
+        with tf.name_scope('RelationPrediction'):
+            self._probas_rel = tf.nn.softmax(logits_rel)
+            self._topk_rel = tf.nn.top_k(self._probas_rel, k=3)
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self.lr, lr_value))
@@ -165,6 +168,10 @@ class RNNClassifierModel(object):
     def decay_lr(self, session, lr_decay):
         new_lr = self.lr * lr_decay
         self.assign_lr(session, new_lr)
+
+    @property
+    def embedding(self):
+        return self._embedding
 
     @property
     def input_data(self):
@@ -175,32 +182,28 @@ class RNNClassifierModel(object):
         return self._lengths
 
     @property
-    def embedding(self):
-        return self._embedding
-
-    @property
-    def short_input_data(self):
+    def input_data_short(self):
         return self._short
 
     @property
-    def short_lengths(self):
+    def lengths_short(self):
         return self._shortlengths
 
     @property
-    def short_weights(self):
+    def weights_short(self):
         return self._shortweights
 
     @property
-    def probas_short(self):
-        return self._probas_short
-
-    @property
-    def probas(self):
-        return self._probas
+    def topk_short(self):
+        return self._topk_short
 
     @property
     def targets(self):
         return self._y
+
+    @property
+    def topk_rel(self):
+        return self._topk_rel
 
     @property
     def cost(self):
@@ -215,16 +218,16 @@ class RNNClassifierModel(object):
         return self._pred_byclass
 
     @property
-    def f1_byclass(self):
-        return self._f1_byclass
-
-    @property
     def precision_byclass(self):
         return self._precision_byclass
 
     @property
     def recall_byclass(self):
         return self._recall_byclass
+
+    @property
+    def f1_byclass(self):
+        return self._f1_byclass
 
     @property
     def lr(self):

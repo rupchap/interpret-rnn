@@ -47,7 +47,7 @@ class Config(object):
     cost_with_short = False
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '20160809-baseline-12-dropout'
+    modelname = ''
 
 
 def main():
@@ -161,9 +161,9 @@ def main():
 def make_feed_dict(m, data, dropout_keep_prob=1.):
     feed_dict = {m.input_data: data['sentence'],
                  m.lengths: data['sentence_lengths'],
-                 m.short_input_data: data['short'],
-                 m.short_lengths: data['short_lengths'],
-                 m.short_weights: data['short_weights'],
+                 m.input_data_short: data['short'],
+                 m.lengths_short: data['short_lengths'],
+                 m.weights_short: data['short_weights'],
                  m.targets: data['relation'],
                  m.dropout_keep_prob: dropout_keep_prob}
     return feed_dict
