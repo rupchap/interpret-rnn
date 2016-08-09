@@ -95,9 +95,9 @@ def main():
             print('INITIALISE VARIABLES FOR NEW MODEL: %s' % modelname)
             init_op = tf.initialize_all_variables()
             sess.run(init_op)
-            # print('APPLY INITIAL WORD EMBEDDINGS')
-            # init_embedding = build_initial_embedding(config)
-            # sess.run(m.embedding.assign(init_embedding))
+            print('APPLY INITIAL WORD EMBEDDINGS')
+            init_embedding = build_initial_embedding(config)
+            sess.run(m.embedding.assign(init_embedding))
 
         # instantiate SummaryWriters to output summaries and the Graph.
         writer = tf.train.SummaryWriter(logfolder + 'train/', graph=sess.graph)
