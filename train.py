@@ -26,9 +26,9 @@ class Config(object):
     max_shortsentence_length = 15
     vocab_size_short = 1000
 
-    rel_vocab_size = 8
+    rel_vocab_size = 12
 
-    dropout_keep_prob = 1.
+    dropout_keep_prob = .5
 
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 1000
@@ -44,10 +44,10 @@ class Config(object):
     embedfolder = '/data/glove/'
 
     cost_with_relation = True
-    cost_with_short = True
+    cost_with_short = False
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '20160808-005740'
+    modelname = '20160809-baseline-12-dropout'
 
 
 def main():
@@ -61,8 +61,8 @@ def main():
     else:
         modelname = time.strftime("%Y%m%d-%H%M%S")
 
-    logfolder = '/tmp/tflogs/' + modelname + '/'
-    ckptpath = '/tmp/tfckpt/' + modelname + '/'
+    logfolder = '/data/tflogs/' + modelname + '/'
+    ckptpath = '/data/tfckpt/' + modelname + '/'
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
     ckptfile = ckptpath + 'model.ckpt'
