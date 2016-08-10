@@ -20,11 +20,19 @@ class DataSet(object):
 
         self._num_examples = self._data['sentence'].shape[0]
 
+        origtext_dict = {'sentence_text': 'sentences',
+                         'enta_text': 'entAs',
+                         'entb_text': 'entBs',
+                         'short_text': 'shortsentences',
+                         'relation_text': 'relations'
+                         }
+        self._origtext = {key: data[origtext_dict[key]] for key in origtext_dict}
+
         # Track position in data
         self._epochs_completed = 0
         self._index_in_epoch = 0
 
-    def next_batch(self, batch_size):
+    def next_batch(self, batch_size, include_text=False):
         """Return the next `batch_size` examples from this data set."""
 
         # update position in data
@@ -50,11 +58,20 @@ class DataSet(object):
 
         data_batch = {key: self._data[key][start:end] for key in self._data.keys()}
 
+        # include original text strings if required
+        if include_text:
+            origtext_batch = {key: self._origtext[key][start:end] for key in self._origtext.keys()}
+            data_batch.update(origtext_batch)
+
         return data_batch
 
     @property
     def data(self):
         return self._data
+
+    @property
+    def origtext(self):
+        return self._origtext
 
     @property
     def num_examples(self):
