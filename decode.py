@@ -15,7 +15,7 @@ from datasets import split_data
 def main():
 
     config = Config()
-    modelname = '20160808-005740'
+    modelname = '2016-08-09-assisted-dropout'
     # modelname = config.modelname
 
     ckptpath = '/data/tfckpt/' + modelname + '/'
@@ -38,15 +38,12 @@ def main():
     rev_vocab_short = dict([(x, y) for (y, x) in enumerate(vocab_short)])
 
     # build vocab dict
-    vocabfile = config.datafolder + 'rel_vocab_8.txt'
+    vocabfile = config.datafolder + 'rel_vocab_12.txt'
     vocab_rel = get_list_from_file(vocabfile)
     rev_vocab_rel = dict([(x, y) for (y, x) in enumerate(vocab_rel)])
 
     print('BUILD GRAPH')
     m = RNNClassifierModel(config=config)
-
-    data_batch = datasets.train.next_batch(1)
-    feed_dict = make_feed_dict(m, data_batch, dropout_keep_prob=1.)
 
     saver = tf.train.Saver()
 
@@ -55,25 +52,34 @@ def main():
         print('RESTORE VARIABLES FOR PREVIOUS MODEL')
         saver.restore(sess, ckpt.model_checkpoint_path)
 
-        print(feed_dict)
+        while True:
+            data_batch = datasets.train.next_batch(1, include_text=True)
 
-        data = sess.run([m.topk_short,
-                         m.topk_rel],
-                        feed_dict=feed_dict)
-        print('data:')
-        print(data)
+            print('long original: ' + data_batch['sentence_text'][0])
+            print('entA original: ' + data_batch['enta_text'][0])
+            print('entB original: ' + data_batch['entb_text'][0])
+            print('short original: ' + data_batch['short_text'][0])
+            print('relation original: ' + data_batch['relation_text'][0])
 
-        # probashort = sess.run(m.probas_short, feed_dict=feed_dict)
-        # print('probashort:')
-        # print(probashort)
+            longsentence = ' '.join([vocab[data_batch['sentence'][0][i]] for i in range(data_batch['sentence_lengths'][0])])
+            shortsentence = ' '.join([vocab_short[data_batch['short'][0][i]] for i in range(data_batch['short_lengths'][0])])
+            relation = vocab_rel[data_batch['relation'][0]]
 
-        topk_short = sess.run(m.topk_short, feed_dict=feed_dict)
+            print('long processed: ' + longsentence)
+            print('short processed: ' + shortsentence)
+            print('relation processed: ' + relation)
 
-        top1 = [topk[0][1] for topk in topk_short]
-        top1sent = [vocab_short[wrd] for wrd in top1]
-        print top1sent
+            feed_dict = make_feed_dict(m, data_batch, dropout_keep_prob=1.)
+            sht, rel = sess.run([m.topk_short, m.topk_rel], feed_dict=feed_dict)
 
-        # TODO: pull back top 3 with probs; map to vocabs.  print long, short actual, short top 3 etc.
+            top1 = [topk[0] for topk in sht]
+            top1sent = ' '.join([vocab_short[wrd] for wrd in top1])
+            relation_pred = vocab_rel[rel[0][0]]
+            print('predicted short: ' + top1sent)
+            print('predicted relation: ' + relation_pred)
+
+            raw_input("Press Enter to continue...")
+            print('---------------------------------------------------------------------------------')
 
 
 if __name__ == "__main__":

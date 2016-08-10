@@ -156,11 +156,11 @@ class RNNClassifierModel(object):
 
         with tf.name_scope('ShortPrediction'):
             self._probas_short = [tf.nn.softmax(logits) for logits in logits_short]
-            self._topk_short = [tf.nn.top_k(probas, k=3) for probas in self._probas_short]
+            self._topk_short = tf.concat(0, [tf.nn.top_k(probas, k=3).indices for probas in self._probas_short])
 
         with tf.name_scope('RelationPrediction'):
             self._probas_rel = tf.nn.softmax(logits_rel)
-            self._topk_rel = tf.nn.top_k(self._probas_rel, k=3)
+            self._topk_rel = tf.nn.top_k(self._probas_rel, k=3).indices
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self.lr, lr_value))

@@ -8,7 +8,7 @@ import os
 from model import RNNClassifierModel
 
 # To run tensorboard:
-# tensorboard --logdir=/tmp/tflogs
+# tensorboard --logdir=/data/tflogs
 
 
 class Config(object):
@@ -28,7 +28,7 @@ class Config(object):
 
     rel_vocab_size = 12
 
-    dropout_keep_prob = .5
+    dropout_keep_prob = 1.
 
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 1000
@@ -38,6 +38,7 @@ class Config(object):
 
     report_step = 200
     save_step = 2000
+    terminate_step = 20000  # 0 for infinite loop.
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
     datafolder = '/data/train/'
@@ -47,13 +48,12 @@ class Config(object):
     cost_with_short = False
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = ''
+    modelname = '2016-08-09-baseline-nodropout'
 
 
 def main():
 
     np.set_printoptions(precision=3, linewidth=150, suppress=True)
-
     config = Config()
 
     if config.modelname:
@@ -155,7 +155,9 @@ def main():
                 print('Saving model to: %s' % ckptfile)
                 saver.save(sess, ckptfile)
 
-    print 'Optimisation complete'
+            if config.terminate_step > 0 and global_step >= config.terminate_step:
+                print('Optimisation complete at %i steps' % global_step)
+                break
 
 
 def make_feed_dict(m, data, dropout_keep_prob=1.):
