@@ -15,7 +15,7 @@ from datasets import split_data
 def main():
 
     config = Config()
-    modelname = '2016-08-09-assisted-dropout'
+    modelname = '2016-08-10-assisted-dropout'
     # modelname = config.modelname
 
     ckptpath = '/data/tfckpt/' + modelname + '/'
@@ -38,7 +38,7 @@ def main():
     rev_vocab_short = dict([(x, y) for (y, x) in enumerate(vocab_short)])
 
     # build vocab dict
-    vocabfile = config.datafolder + 'rel_vocab_12.txt'
+    vocabfile = config.datafolder + 'rel_vocab_15.txt'
     vocab_rel = get_list_from_file(vocabfile)
     rev_vocab_rel = dict([(x, y) for (y, x) in enumerate(vocab_rel)])
 
@@ -53,7 +53,7 @@ def main():
         saver.restore(sess, ckpt.model_checkpoint_path)
 
         while True:
-            data_batch = datasets.train.next_batch(1, include_text=True)
+            data_batch = datasets.validation.next_batch(1, include_text=True)
 
             print('long original: ' + data_batch['sentence_text'][0])
             print('entA original: ' + data_batch['enta_text'][0])

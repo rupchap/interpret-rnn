@@ -26,9 +26,9 @@ class Config(object):
     max_shortsentence_length = 15
     vocab_size_short = 1000
 
-    rel_vocab_size = 12
+    rel_vocab_size = 15
 
-    dropout_keep_prob = 1.
+    dropout_keep_prob = .5
 
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 1000
@@ -38,17 +38,17 @@ class Config(object):
 
     report_step = 200
     save_step = 2000
-    terminate_step = 20000  # 0 for infinite loop.
+    terminate_step = 0  # 0 for infinite loop.
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
     datafolder = '/data/train/'
     embedfolder = '/data/glove/'
 
     cost_with_relation = True
-    cost_with_short = False
+    cost_with_short = True
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '2016-08-09-baseline-nodropout'
+    modelname = '2016-08-10-assisted-dropout'
 
 
 def main():
@@ -129,7 +129,7 @@ def main():
             if global_step > 0 and global_step % config.report_step == 0:
                 summaries_val, cost_val = sess.run([merged, m.cost], feed_dict=feed_dict_val)
                 writer_val.add_summary(summaries, global_step=global_step)
-                print('step:%2i batch cost:%8f validation cost:%8f' % (global_step, cost_batch, cost_val))
+                print('model: %s step:%2i batch cost:%8f validation cost:%8f' % (modelname, global_step, cost_batch, cost_val))
 
                 # Training accuracy
                 stats_trn = sess.run([m.actual_byclass, m.pred_byclass, m.precision_byclass,

@@ -288,7 +288,8 @@ def process_data(data, config):
 
     rel_vocab = dict([(x, y) for (y, x) in enumerate(rel_vocab_list)])
 
-    relation_vecs = [rel_vocab.get(relation, UNK_ID) for relation in data['relations']]
+    # index for unknown = 0 - return as default.
+    relation_vecs = [rel_vocab.get(relation, 0) for relation in data['relations']]
     data['relation_vecs'] = np.array(relation_vecs, np.int32)
 
     return data
