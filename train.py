@@ -28,7 +28,7 @@ class Config(object):
 
     rel_vocab_size = 15
 
-    dropout_keep_prob = .5
+    dropout_keep_prob = 1.
 
     train_size = 0  # 0 to use all remaining data for training.
     validation_size = 1000
@@ -38,17 +38,17 @@ class Config(object):
 
     report_step = 200
     save_step = 2000
-    terminate_step = 0  # 0 for infinite loop.
+    terminate_step = 20000  # 0 for infinite loop.
 
     srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
     datafolder = '/data/train/'
     embedfolder = '/data/glove/'
 
     cost_with_relation = True
-    cost_with_short = True
+    cost_with_short = False
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '2016-08-10-assisted-dropout'
+    modelname = '2016-08-10-baseline-nodropout'
 
 
 def main():
