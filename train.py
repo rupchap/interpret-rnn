@@ -17,6 +17,9 @@ class Config(object):
     lr_decay = 0.99
     max_grad_norm = 5
 
+    lr_decay_on_generalisation_error = False  # True to decay learning rate when validation error increases
+    check_for_early_stop = True
+
     embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
     hidden_size = 150
 
@@ -26,7 +29,7 @@ class Config(object):
     max_shortsentence_length = 15
     vocab_size_short = 1000
 
-    rel_vocab_size = 15
+    rel_vocab_size = 200  # 200 will capture all relations present in training data [185 in all data]
 
     dropout_keep_prob = 1.
 
@@ -37,6 +40,7 @@ class Config(object):
     batch_size = 64
 
     report_step = 200
+    lr_decay_step = 600  # for fixed LR decay if not decaying by generalisation error
     save_step = 2000
     terminate_step = 20000  # 0 for infinite loop.
 
@@ -45,10 +49,10 @@ class Config(object):
     embedfolder = '/data/glove/'
 
     cost_with_relation = True
-    cost_with_short = False
+    cost_with_short = True
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '2016-08-10-baseline-nodropout'
+    modelname = '2016-08-23-assisted-nodropout-allrels-earlystop2'
 
 
 def main():
@@ -111,8 +115,10 @@ def main():
         data_val = datasets.validation.data
         feed_dict_val = make_feed_dict(m, data_val, dropout_keep_prob=1.0)
 
-        # keep track of validation costs to adjust learning rate when needed
+        # keep track of validation costs at each report interval to adjust learning rate when needed
         previous_val_costs = []
+        # keep track of validation costs at each save interval for early stop
+        previous_val_costs_at_save = []
 
         # loop over training steps
         while True:
@@ -125,7 +131,7 @@ def main():
 
             writer.add_summary(summaries, global_step=global_step)
 
-            # Report stats and consider reducing LR
+            # Report stats and consider reducing LR / early stop
             if global_step > 0 and global_step % config.report_step == 0:
                 summaries_val, cost_val = sess.run([merged, m.cost], feed_dict=feed_dict_val)
                 writer_val.add_summary(summaries, global_step=global_step)
@@ -146,15 +152,34 @@ def main():
                 print(np.stack(stats_val))
 
                 # decay learning rate if not improving
-                if len(previous_val_costs) > 3 and cost_val > max(previous_val_costs[-4:]):
-                    m.decay_lr(sess, config.lr_decay)
-                    print('decayed lr to:', sess.run(m.lr, feed_dict))
+                if config.lr_decay_on_generalisation_error:
+                    if len(previous_val_costs) > 3 and cost_val > max(previous_val_costs[-4:]):
+                        m.decay_lr(sess, config.lr_decay)
+                        print('decayed lr to:', sess.run(m.lr, feed_dict))
                 previous_val_costs.append(cost_val)
 
+            # decay learning rate at fixed rate
+            if not config.lr_decay_on_generalisation_error:
+                if global_step > 0 and config.lr_decay_step > 0 and global_step % config.lr_decay_step == 0:
+                    m.decay_lr(sess, config.lr_decay)
+                    print('decayed lr to:', sess.run(m.lr, feed_dict))
+
+            # savepoint
             if global_step > 0 and global_step % config.save_step == 0:
+                # early stop
+                early_stop = False
+                if config.check_for_early_stop:
+                    if len(previous_val_costs_at_save) > 3 and cost_val > max(previous_val_costs_at_save[-4:]):
+                        early_stop = True
+
                 print('Saving model to: %s' % ckptfile)
                 saver.save(sess, ckptfile)
 
+                if early_stop:
+                    print('terminating early due to early stop at step %i' % global_step)
+                    break
+
+            # terminate after max steps
             if config.terminate_step > 0 and global_step >= config.terminate_step:
                 print('Optimisation complete at %i steps' % global_step)
                 break
