@@ -108,18 +108,15 @@ class RNNClassifierModel(object):
 
         # TOTAL COST
         with tf.variable_scope('TotalCost'):
-            if config.cost_with_relation:
-                if config.cost_with_short:
-                    cost = cost_relation + cost_short
-                else:
-                    cost = cost_relation
-            else:
-                cost = cost_short
+            cost = config.cost_weight_relation * cost_relation + config.cost_weight_short * cost_short
             self._cost = cost
+            tf.scalar_summary('cost_total', cost)
+
 
         with tf.name_scope('Optimizer'):
             # Initial learning rate
             self._lr = tf.Variable(config.learning_rate, trainable=False)
+            tf.scalar_summary('learn_rate', self._lr)
 
             # Optimizer with clipped gradients
             # tvars = tf.trainable_variables()

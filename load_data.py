@@ -13,7 +13,7 @@ import subprocess
 from collections import Counter
 
 from datasets import build_datasets
-
+from configs import DefaultConfig
 
 # regex for digits
 _DIGIT_RE = re.compile(r"\d")
@@ -36,23 +36,9 @@ _ENTA = '_enta'
 _ENTB = '_entb'
 
 
-class DataConfig(object):
-    vocab_size = 10000
-    embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
-    max_sentence_length = 106
-    max_shortsentence_length = 15
-    rel_vocab_size = 8
-    train_size = 0  # 0 to use all remaining data for training.
-    validation_size = 5000
-    test_size = 500
-    srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
-    datafolder = '/data/train/'
-    embedfolder = '/data/glove/'
-
-
 def main():
 
-    datasets = get_datasets(config=DataConfig())
+    datasets = get_datasets(config=DefaultConfig())
     data_train = datasets.train.next_batch(5)
     print('training sample:')
     print(data_train)
@@ -67,7 +53,7 @@ def get_datasets(config):
     return datasets
 
 
-def get_pickled_data_or_rebuild(config=DataConfig()):
+def get_pickled_data_or_rebuild(config=DefaultConfig()):
 
     # if pickled data already exist then load it
     picklefilepath = config.datafolder + 'data_%i_%i.pkl' % (config.vocab_size, config.rel_vocab_size)
@@ -88,7 +74,7 @@ def get_pickled_data_or_rebuild(config=DataConfig()):
     return data
 
 
-def build_data(config=DataConfig()):
+def build_data(config=DefaultConfig()):
 
     # import data from source
     data = read_data_from_source(filename=config.srcfile)
@@ -190,28 +176,32 @@ def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=Tru
     print(counts_by_label)
     pos_count, neg_count, unl_count = counts_by_label[['POSITIVE', 'NEGATIVE', 'UNLABELED']]
 
-    # Filter data to required number of cases of different label types
-    pos_req = pos_count
-    if keep_negative:
-        if equal_posneg:
-            neg_req = min(pos_req, neg_count)
-            pos_req = min(neg_req, pos_req)
+    # Short cut if only positive required. NB THIS RETAINS ORDERING OF RECORDS; OTHER MIXES SHUFFLE DATA.
+    if not(keep_negative and keep_unlabeled):
+        data_filtered_df = data_df[data_df['labels'] == 'POSITIVE']
+    else:
+        # Filter data to required number of cases of different label types
+        pos_req = pos_count
+        if keep_negative:
+            if equal_posneg:
+                neg_req = min(pos_req, neg_count)
+                pos_req = min(neg_req, pos_req)
+            else:
+                neg_req = neg_count
         else:
-            neg_req = neg_count
-    else:
-        neg_req = 0
+            neg_req = 0
 
-    if keep_unlabeled:
-        unl_req = unl_count
-    else:
-        unl_req = 0
+        if keep_unlabeled:
+            unl_req = unl_count
+        else:
+            unl_req = 0
 
-    pos = data_df[data_df['labels'] == 'POSITIVE'].sample(n=pos_req)
-    neg = data_df[data_df['labels'] == 'NEGATIVE'].sample(n=neg_req)
-    unl = data_df[data_df['labels'] == 'UNLABELED'].sample(n=unl_req)
-    data_filtered_df = pd.concat([pos, neg, unl])
-    # shuffle rows
-    data_filtered_df = data_filtered_df.sample(frac=1)
+        pos = data_df[data_df['labels'] == 'POSITIVE'].sample(n=pos_req)
+        neg = data_df[data_df['labels'] == 'NEGATIVE'].sample(n=neg_req)
+        unl = data_df[data_df['labels'] == 'UNLABELED'].sample(n=unl_req)
+        data_filtered_df = pd.concat([pos, neg, unl])
+        # shuffle rows
+        data_filtered_df = data_filtered_df.sample(frac=1)
 
     # count occurrences of 'POSITIVE', 'NEGATIVE' and 'UNLABELED' records in filtered data
     counts_by_label = data_filtered_df.groupby(['labels']).size()

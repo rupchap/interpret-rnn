@@ -4,6 +4,7 @@ from load_data import get_datasets
 from load_data import build_initial_embedding
 import time
 import os
+from configs import DefaultConfig, AltConfig
 
 from model import RNNClassifierModel
 
@@ -11,54 +12,10 @@ from model import RNNClassifierModel
 # tensorboard --logdir=/data/tflogs
 
 
-class Config(object):
-    # init_scale = 0.1
-    learning_rate = 1.
-    lr_decay = 0.99
-    max_grad_norm = 5
-
-    lr_decay_on_generalisation_error = False  # True to decay learning rate when validation error increases
-    check_for_early_stop = True
-
-    embed_size = 200    # 50, 100, 200 or 300 to match glove embeddings
-    hidden_size = 150
-
-    max_sentence_length = 106
-    vocab_size = 10000
-
-    max_shortsentence_length = 15
-    vocab_size_short = 1000
-
-    rel_vocab_size = 200  # 200 will capture all relations present in training data [185 in all data]
-
-    dropout_keep_prob = 1.
-
-    train_size = 0  # 0 to use all remaining data for training.
-    validation_size = 1000
-    test_size = 0
-
-    batch_size = 64
-
-    report_step = 200
-    lr_decay_step = 600  # for fixed LR decay if not decaying by generalisation error
-    save_step = 2000
-    terminate_step = 20000  # 0 for infinite loop.
-
-    srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
-    datafolder = '/data/train/'
-    embedfolder = '/data/glove/'
-
-    cost_with_relation = True
-    cost_with_short = True
-
-    # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = '2016-08-23-assisted-nodropout-allrels-earlystop2'
-
-
 def main():
 
     np.set_printoptions(precision=3, linewidth=150, suppress=True)
-    config = Config()
+    config = DefaultConfig()
 
     if config.modelname:
         modelname = config.modelname
@@ -107,13 +64,9 @@ def main():
         writer = tf.train.SummaryWriter(logfolder + 'train/', graph=sess.graph)
         writer_val = tf.train.SummaryWriter(logfolder + 'val/')
 
-        # get full training data feed_dict - no dropout
-        data_train = datasets.train.data
-        feed_dict_train = make_feed_dict(m, data_train, dropout_keep_prob=1.0)
-
-        # get validation data feed_dict - no dropout
-        data_val = datasets.validation.data
-        feed_dict_val = make_feed_dict(m, data_val, dropout_keep_prob=1.0)
+        # get full training & validation data feed_dicts - no dropout
+        feed_dict_train = make_feed_dict(m, datasets.train.data, dropout_keep_prob=1.)
+        feed_dict_val = make_feed_dict(m, datasets.validation.data, dropout_keep_prob=1.)
 
         # keep track of validation costs at each report interval to adjust learning rate when needed
         previous_val_costs = []
@@ -131,7 +84,7 @@ def main():
 
             writer.add_summary(summaries, global_step=global_step)
 
-            # Report stats and consider reducing LR / early stop
+            # Report stats and consider reducing LR
             if global_step > 0 and global_step % config.report_step == 0:
                 summaries_val, cost_val = sess.run([merged, m.cost], feed_dict=feed_dict_val)
                 writer_val.add_summary(summaries, global_step=global_step)
@@ -164,20 +117,16 @@ def main():
                     m.decay_lr(sess, config.lr_decay)
                     print('decayed lr to:', sess.run(m.lr, feed_dict))
 
-            # savepoint
+            # savepoint and check early stop
             if global_step > 0 and global_step % config.save_step == 0:
                 # early stop
-                early_stop = False
                 if config.check_for_early_stop:
                     if len(previous_val_costs_at_save) > 3 and cost_val > max(previous_val_costs_at_save[-4:]):
-                        early_stop = True
+                        print('terminating early due to early stop criteria')
+                        break
 
                 print('Saving model to: %s' % ckptfile)
                 saver.save(sess, ckptfile)
-
-                if early_stop:
-                    print('terminating early due to early stop at step %i' % global_step)
-                    break
 
             # terminate after max steps
             if config.terminate_step > 0 and global_step >= config.terminate_step:
