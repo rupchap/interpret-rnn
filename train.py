@@ -4,8 +4,7 @@ from load_data import get_datasets
 from load_data import build_initial_embedding
 import time
 import os
-from configs import DefaultConfig, AltConfig
-
+import configs as cf
 from model import RNNClassifierModel
 
 # To run tensorboard:
@@ -14,8 +13,9 @@ from model import RNNClassifierModel
 
 def main():
 
+    config = cf.AssistDropout()
+
     np.set_printoptions(precision=3, linewidth=150, suppress=True)
-    config = DefaultConfig()
 
     if config.modelname:
         modelname = config.modelname
@@ -87,7 +87,7 @@ def main():
             # Report stats and consider reducing LR
             if global_step > 0 and global_step % config.report_step == 0:
                 summaries_val, cost_val = sess.run([merged, m.cost], feed_dict=feed_dict_val)
-                writer_val.add_summary(summaries, global_step=global_step)
+                writer_val.add_summary(summaries_val, global_step=global_step)
                 print('model: %s step:%2i batch cost:%8f validation cost:%8f' % (modelname, global_step, cost_batch, cost_val))
 
                 # Training accuracy
@@ -120,13 +120,15 @@ def main():
             # savepoint and check early stop
             if global_step > 0 and global_step % config.save_step == 0:
                 # early stop
-                if config.check_for_early_stop:
-                    if len(previous_val_costs_at_save) > 3 and cost_val > max(previous_val_costs_at_save[-4:]):
+                if config.check_for_early_stop and global_step > config.save_step:
+                    if cost_val > cost_val_previous:
                         print('terminating early due to early stop criteria')
                         break
+                cost_val_previous = cost_val
 
                 print('Saving model to: %s' % ckptfile)
                 saver.save(sess, ckptfile)
+                print('Saved')
 
             # terminate after max steps
             if config.terminate_step > 0 and global_step >= config.terminate_step:

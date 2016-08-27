@@ -1,7 +1,7 @@
 class DefaultConfig(object):
 
     # model name - if provided, will seek to load previous checkpoint and continue training.
-    modelname = 'baseline'
+    modelname = 'baselineES'
 
     # file locations
     # srcfile = '/data/NYT/nyt-freebase.train.triples.universal.mention.txt'
@@ -44,3 +44,23 @@ class DefaultConfig(object):
     # Weights for each element of cost function
     cost_weight_relation = 1.
     cost_weight_short = 0.
+
+
+class AssistConfig(DefaultConfig):
+    modelname = 'assistedES'
+    cost_weight_relation = 1.
+    cost_weight_short = 1.
+
+
+class BaselineDropout(DefaultConfig):
+    modelname = 'baselineES_dropout'
+    cost_weight_relation = 1.
+    cost_weight_short = 0.
+    dropout_keep_prob = 0.8
+
+
+class AssistDropout(DefaultConfig):
+    modelname = 'assistedES_dropout'
+    cost_weight_relation = 1.
+    cost_weight_short = 0.
+    dropout_keep_prob = 0.8
