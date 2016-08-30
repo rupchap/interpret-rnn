@@ -62,5 +62,12 @@ class BaselineDropout(DefaultConfig):
 class AssistDropout(DefaultConfig):
     modelname = 'assistedES_dropout'
     cost_weight_relation = 1.
-    cost_weight_short = 0.
+    cost_weight_short = 1.
     dropout_keep_prob = 0.8
+
+
+class AssistDropout2(AssistDropout):
+    modelname = 'assistedES_dropout2'
+
+class TryRegulariastion(DefaultConfig):
+    modelname = 'tryregularisationBaseline'
