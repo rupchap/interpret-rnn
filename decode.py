@@ -5,7 +5,8 @@ import time
 import pickle
 
 from model import RNNClassifierModel
-from train import Config, make_feed_dict
+from train import make_feed_dict
+import configs as cf
 from datasets import split_data
 
 # To run tensorboard:
@@ -14,9 +15,8 @@ from datasets import split_data
 
 def main():
 
-    config = Config()
-    modelname = '2016-08-10-assisted-dropout'
-    # modelname = config.modelname
+    config = cf.DefaultConfig()
+    modelname = config.modelname
 
     ckptpath = '/data/tfckpt/' + modelname + '/'
     ckpt = tf.train.get_checkpoint_state(ckptpath)
@@ -28,17 +28,17 @@ def main():
 
     print('Load Vocabs')
     # build vocab dict
-    vocabfile = config.datafolder + 'vocab_10000.txt'
+    vocabfile = config.datafolder + 'vocab_' + str(config.vocab_size) + '.txt'
     vocab = get_list_from_file(vocabfile)
     rev_vocab = dict([(x, y) for (y, x) in enumerate(vocab)])
 
     # build short vocab dict
-    vocabfile = config.datafolder + 'vocab_short_1000.txt'
+    vocabfile = config.datafolder + 'vocab_short_' + str(config.vocab_size_short) + '.txt'
     vocab_short = get_list_from_file(vocabfile)
     rev_vocab_short = dict([(x, y) for (y, x) in enumerate(vocab_short)])
 
     # build vocab dict
-    vocabfile = config.datafolder + 'rel_vocab_15.txt'
+    vocabfile = config.datafolder + 'rel_vocab_' + str(config.rel_vocab_size) +'.txt'
     vocab_rel = get_list_from_file(vocabfile)
     rev_vocab_rel = dict([(x, y) for (y, x) in enumerate(vocab_rel)])
 
