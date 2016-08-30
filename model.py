@@ -106,6 +106,12 @@ class RNNClassifierModel(object):
             self._cost_relation = cost_relation
             tf.scalar_summary('cost_relation', cost_relation)
 
+        # # RegularisationCost
+        # with tf.name_scope('Regularisation'):
+        #     l2cost = tf.contrib.layers.apply_regularization(tf.contrib.layers.l2_regularizer(.5))
+        #     self._l2cost = l2cost
+        #     tf.scalar_summary('l2_loss', l2cost)
+
         # TOTAL COST
         with tf.variable_scope('TotalCost'):
             cost = config.cost_weight_relation * cost_relation + config.cost_weight_short * cost_short
