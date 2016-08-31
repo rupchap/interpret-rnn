@@ -13,12 +13,9 @@ from model import RNNClassifierModel
 
 def main():
     # Weights for each element of cost function
-    config = cf.DefaultConfig()
-    for w in range(10, 11):
-        config.cost_weight_relation = (10 - w) / 10.
-        config.cost_weight_short = w / 10.
-        config.modelname += str(w)
-        run_training(config=config)
+    config = cf.MixConfig(6)
+    config.modelname = config.modelname + '_2'
+    run_training(config=config)
 
 
 def run_training(config=cf.DefaultConfig()):

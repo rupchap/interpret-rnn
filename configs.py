@@ -69,5 +69,13 @@ class AssistDropout(DefaultConfig):
 class AssistDropout2(AssistDropout):
     modelname = 'assistedES_dropout2'
 
+
 class TryRegulariastion(DefaultConfig):
     modelname = 'tryregularisationBaseline'
+
+
+class MixConfig(DefaultConfig):
+    def __init__(self, assistfactor):
+        self.cost_weight_relation = 1. - assistfactor/10.
+        self.cost_weight_short = assistfactor/10.
+        self.modelname = self.modelname + str(assistfactor)

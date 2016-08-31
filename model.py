@@ -146,13 +146,35 @@ class RNNClassifierModel(object):
             total_actual_byclass = tf.reduce_sum(y_actual_onehot, 0)
             total_correct_byclass = tf.reduce_sum(y_correct_onehot, 0)
 
+            # # move _unk category to end.
+            # total_pred_byclass_unk = tf.slice(total_pred_byclass, [0], [1])
+            # total_pred_byclass_kn = tf.slice(total_pred_byclass, [1], [tf.size(total_pred_byclass)-1])
+            # total_pred_byclass = tf.concat(0, [total_pred_byclass_kn, total_pred_byclass_unk])
+            #
+            # total_actual_byclass_unk = tf.slice(total_actual_byclass, [0], [1])
+            # total_actual_byclass_kn = tf.slice(total_actual_byclass, [1], [tf.size(total_actual_byclass)-1])
+            # total_actual_byclass = tf.concat(0, [total_actual_byclass_kn, total_actual_byclass_unk])
+            #
+            # total_correct_byclass_unk = tf.slice(total_correct_byclass, [0], [1])
+            # total_correct_byclass_kn = tf.slice(total_correct_byclass, [1], [tf.size(total_correct_byclass)-1])
+            # total_correct_byclass = tf.concat(0, [total_correct_byclass_kn, total_correct_byclass_unk])
+
+            # Calculate precision, recall, F1
             precision_byclass = tf.truediv(total_correct_byclass, total_pred_byclass)
             recall_byclass = tf.truediv(total_correct_byclass, total_actual_byclass)
             f1_byclass = 2. * tf.truediv(tf.mul(precision_byclass, recall_byclass),
                                          tf.add(precision_byclass, recall_byclass))
 
+            # fix 0/0 errors - set to 0 instead of nan
+            no_correct_byclass = tf.equal(total_correct_byclass, 0, name=None)
+            zeros_byclass = tf.zeros_like(precision_byclass)
+            precision_byclass = tf.select(no_correct_byclass, zeros_byclass, precision_byclass)
+            recall_byclass = tf.select(no_correct_byclass, zeros_byclass, recall_byclass)
+            f1_byclass = tf.select(no_correct_byclass, zeros_byclass, f1_byclass)
+
             self._pred_byclass = total_pred_byclass
             self._actual_byclass = total_actual_byclass
+            self._correct_byclass = total_correct_byclass
             self._precision_byclass = precision_byclass
             self._recall_byclass = recall_byclass
             self._f1_byclass = f1_byclass
@@ -219,6 +241,10 @@ class RNNClassifierModel(object):
     @property
     def pred_byclass(self):
         return self._pred_byclass
+
+    @property
+    def correct_byclass(self):
+        return self._correct_byclass
 
     @property
     def precision_byclass(self):
