@@ -146,19 +146,6 @@ class RNNClassifierModel(object):
             total_actual_byclass = tf.reduce_sum(y_actual_onehot, 0)
             total_correct_byclass = tf.reduce_sum(y_correct_onehot, 0)
 
-            # # move _unk category to end.
-            # total_pred_byclass_unk = tf.slice(total_pred_byclass, [0], [1])
-            # total_pred_byclass_kn = tf.slice(total_pred_byclass, [1], [tf.size(total_pred_byclass)-1])
-            # total_pred_byclass = tf.concat(0, [total_pred_byclass_kn, total_pred_byclass_unk])
-            #
-            # total_actual_byclass_unk = tf.slice(total_actual_byclass, [0], [1])
-            # total_actual_byclass_kn = tf.slice(total_actual_byclass, [1], [tf.size(total_actual_byclass)-1])
-            # total_actual_byclass = tf.concat(0, [total_actual_byclass_kn, total_actual_byclass_unk])
-            #
-            # total_correct_byclass_unk = tf.slice(total_correct_byclass, [0], [1])
-            # total_correct_byclass_kn = tf.slice(total_correct_byclass, [1], [tf.size(total_correct_byclass)-1])
-            # total_correct_byclass = tf.concat(0, [total_correct_byclass_kn, total_correct_byclass_unk])
-
             # Calculate precision, recall, F1
             precision_byclass = tf.truediv(total_correct_byclass, total_pred_byclass)
             recall_byclass = tf.truediv(total_correct_byclass, total_actual_byclass)
