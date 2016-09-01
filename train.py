@@ -13,8 +13,9 @@ from model import RNNClassifierModel
 
 def main():
     # Weights for each element of cost function
-    config = cf.MixConfig(6)
-    run_training(config=config)
+    for i in range(1, 3):
+        config = cf.TestMixConfig(i)
+        run_training(config=config)
 
 
 def run_training(config=cf.DefaultConfig()):
@@ -138,6 +139,8 @@ def run_training(config=cf.DefaultConfig()):
             if config.terminate_step > 0 and global_step >= config.terminate_step:
                 print('Optimisation complete at %i steps' % global_step)
                 break
+    print 'Training complete, dropping graph'
+    tf.reset_default_graph()
 
 
 def make_feed_dict(m, data, dropout_keep_prob=1.):

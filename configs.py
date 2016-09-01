@@ -79,3 +79,10 @@ class MixConfig(DefaultConfig):
         self.cost_weight_relation = 1. - assistfactor/10.
         self.cost_weight_short = assistfactor/10.
         self.modelname = self.modelname + str(assistfactor)
+
+
+class TestMixConfig(DefaultConfig):
+    def __init__(self, assistfactor):
+        self.cost_weight_relation = 1. - assistfactor/10.
+        self.cost_weight_short = assistfactor/10.
+        self.modelname = 'mixmodel' + str(assistfactor)
