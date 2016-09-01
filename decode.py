@@ -15,7 +15,8 @@ from datasets import split_data
 
 def main():
 
-    config = cf.DefaultConfig()
+    config = cf.MixConfig(6)
+    config.modelname = config.modelname + '_embed2'
     modelname = config.modelname
 
     ckptpath = '/data/tfckpt/' + modelname + '/'
@@ -53,7 +54,7 @@ def main():
         saver.restore(sess, ckpt.model_checkpoint_path)
 
         while True:
-            data_batch = datasets.validation.next_batch(1, include_text=True)
+            data_batch = datasets.test.next_batch(1, include_text=True)
 
             print('long original: ' + data_batch['sentence_text'][0])
             print('entA original: ' + data_batch['enta_text'][0])
@@ -76,7 +77,9 @@ def main():
             top1sent = ' '.join([vocab_short[wrd] for wrd in top1])
             relation_pred = vocab_rel[rel[0][0]]
             print('predicted short: ' + top1sent)
-            print('predicted relation: ' + relation_pred)
+            print('predicted relation: ' + vocab_rel[rel[0][0]])
+            print('predicted relation2: ' + vocab_rel[rel[0][1]])
+            print('predicted relation3: ' + vocab_rel[rel[0][2]])
 
             raw_input("Press Enter to continue...")
             print('---------------------------------------------------------------------------------')

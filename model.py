@@ -63,23 +63,36 @@ class RNNClassifierModel(object):
 
         # DECODE SHORT SENTENCE USING LAYER 0 OUTPUT FROM RNN
         # Construct and embed inputs for short sentence decoder [_go followed by _pad]
+
+        # short sentence embedding
+        with tf.name_scope('Embedding_short'):
+            embedding_short = tf.get_variable("embedding_short", [config.vocab_size_short, config.embed_size])
+
         with tf.variable_scope("ShortInputs"):
             gos = tf.fill([batch_size, 1], 2)
             pads = tf.zeros([batch_size, config.max_shortsentence_length - 1], dtype=tf.int32)
             shortinputs = tf.concat(1, [gos, pads])
-            shortinputs_embed = tf.nn.embedding_lookup(self._embedding, shortinputs)
+            shortinputs_embed = tf.nn.embedding_lookup(embedding_short, shortinputs)
 
         with tf.variable_scope("ShortDecoder"):
             shortinputs_embed = [tf.squeeze(input_, [1]) for input_ in
                                  tf.split(1, config.max_shortsentence_length, shortinputs_embed)]
-            cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size*2, forget_bias=1.0, state_is_tuple=True)
+            cell_dc = rnn_cell.BasicLSTMCell(config.hidden_size * 2, forget_bias=1.0, state_is_tuple=True)
+
+            W_short = tf.get_variable("W_short", [config.hidden_size * 2, config.vocab_size_short])
+            b_short = tf.get_variable("b_short", [config.vocab_size_short])
+            output_projection_short = (W_short, b_short)
+
+            loop_function_short = tf.nn.seq2seq._extract_argmax_and_embed(embedding=embedding_short,
+                                                                          output_projection=output_projection_short,
+                                                                          update_embedding=True)
+
             outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=shortinputs_embed,
                                                              initial_state=output_state_comb[0],
-                                                             cell=cell_dc)
+                                                             cell=cell_dc,
+                                                             loop_function=loop_function_short)
 
         with tf.variable_scope("ShortLogits"):
-            W_short = tf.get_variable("W_short", [config.hidden_size*2, config.vocab_size_short])
-            b_short = tf.get_variable("b_short", [config.vocab_size_short])
             logits_short = [tf.matmul(output, W_short) + b_short for output in outputs_dc]
 
         with tf.variable_scope('ShortCost'):

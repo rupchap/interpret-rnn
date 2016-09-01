@@ -14,7 +14,6 @@ from model import RNNClassifierModel
 def main():
     # Weights for each element of cost function
     config = cf.MixConfig(6)
-    config.modelname = config.modelname + '_2'
     run_training(config=config)
 
 
