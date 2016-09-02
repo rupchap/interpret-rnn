@@ -86,11 +86,11 @@ class MixConfigNoDropout(DefaultConfig):
         self.cost_weight_relation = 1. - assistfactor/10.
         self.cost_weight_short = assistfactor/10.
         self.dropout_keep_prob = 1.
-        self.modelname = 'mixmodel' + str(assistfactor)
+        self.modelname = 'rpt_mixmodel' + str(assistfactor)
 
 class MixConfigDropout(DefaultConfig):
     def __init__(self, assistfactor):
         self.cost_weight_relation = 1. - assistfactor/10.
         self.cost_weight_short = assistfactor/10.
         self.dropout_keep_prob = 0.8
-        self.modelname = 'mixmodel_dropout' + str(assistfactor)
+        self.modelname = 'rpt_mixmodel_dropout' + str(assistfactor)

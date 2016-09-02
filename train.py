@@ -13,7 +13,7 @@ from model import RNNClassifierModel
 
 def main():
     # Weights for each element of cost function
-    for i in range(1, 10):
+    for i in range(0, 10):
         config = cf.MixConfigNoDropout(i)
         run_training(config=config)
         config = cf.MixConfigDropout(i)

@@ -67,8 +67,6 @@ class RNNClassifierModel(object):
         # short sentence embedding
         with tf.name_scope('Embedding_short'):
             embedding_short = tf.get_variable("embedding_short", [config.vocab_size_short, config.embed_size])
-
-        with tf.variable_scope("ShortInputs"):
             gos = tf.fill([batch_size, 1], 2)
             pads = tf.zeros([batch_size, config.max_shortsentence_length - 1], dtype=tf.int32)
             shortinputs = tf.concat(1, [gos, pads])
@@ -81,10 +79,9 @@ class RNNClassifierModel(object):
 
             W_short = tf.get_variable("W_short", [config.hidden_size * 2, config.vocab_size_short])
             b_short = tf.get_variable("b_short", [config.vocab_size_short])
-            output_projection_short = (W_short, b_short)
 
             loop_function_short = tf.nn.seq2seq._extract_argmax_and_embed(embedding=embedding_short,
-                                                                          output_projection=output_projection_short,
+                                                                          output_projection=(W_short, b_short),
                                                                           update_embedding=True)
 
             outputs_dc, state_dc = tf.nn.seq2seq.rnn_decoder(decoder_inputs=shortinputs_embed,
