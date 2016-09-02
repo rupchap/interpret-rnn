@@ -13,8 +13,10 @@ from model import RNNClassifierModel
 
 def main():
     # Weights for each element of cost function
-    for i in range(1, 3):
-        config = cf.TestMixConfig(i)
+    for i in range(1, 10):
+        config = cf.MixConfigNoDropout(i)
+        run_training(config=config)
+        config = cf.MixConfigDropout(i)
         run_training(config=config)
 
 
@@ -54,9 +56,19 @@ def run_training(config=cf.DefaultConfig()):
 
     with tf.Session() as sess:
 
+        # get full training & validation data feed_dicts - no dropout
+        feed_dict_train = make_feed_dict(m, datasets.train.data, dropout_keep_prob=1.)
+        feed_dict_val = make_feed_dict(m, datasets.validation.data, dropout_keep_prob=1.)
+
+        # keep track of validation costs at each report interval to adjust learning rate when needed
+        previous_val_costs = []
+
         if ckpt:
             print('RESTORE VARIABLES FOR MODEL: %s' % modelname)
             saver.restore(sess, ckpt.model_checkpoint_path)
+            # get last validation cost for early-stop check.
+            cost_val_previous = sess.run(m.cost, feed_dict=feed_dict_val)
+
         else:
             print('INITIALISE VARIABLES FOR NEW MODEL: %s' % modelname)
             init_op = tf.initialize_all_variables()
@@ -68,15 +80,6 @@ def run_training(config=cf.DefaultConfig()):
         # instantiate SummaryWriters to output summaries and the Graph.
         writer = tf.train.SummaryWriter(logfolder + 'train/', graph=sess.graph)
         writer_val = tf.train.SummaryWriter(logfolder + 'val/')
-
-        # get full training & validation data feed_dicts - no dropout
-        feed_dict_train = make_feed_dict(m, datasets.train.data, dropout_keep_prob=1.)
-        feed_dict_val = make_feed_dict(m, datasets.validation.data, dropout_keep_prob=1.)
-
-        # keep track of validation costs at each report interval to adjust learning rate when needed
-        previous_val_costs = []
-        # keep track of validation costs at each save interval for early stop
-        previous_val_costs_at_save = []
 
         # loop over training steps
         while True:

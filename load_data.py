@@ -76,8 +76,9 @@ def get_pickled_data_or_rebuild(config=DefaultConfig()):
 
 def build_data(config=DefaultConfig()):
 
-    # import data from source
     data = read_data_from_source(filename=config.srcfile)
+
+    data = shuffle_data(data)
 
     save_data_by_field_to_individual_files(data, folder=config.datafolder)
     build_short_sentences_file(folder=config.datafolder)  # run scala script
@@ -212,6 +213,14 @@ def filter_data(data, keep_unlabeled=False, keep_negative=True, equal_posneg=Tru
     data_filtered = data_filtered_df.to_dict(orient='list')
 
     return data_filtered
+
+
+def shuffle_data(data):
+    data_df = pd.DataFrame(data)
+    data_df = data_df.sample(frac=1)
+    data_shuffled = data_df.to_dict(orient='list')
+    return data_shuffled
+
 
 
 def process_data(data, config):
